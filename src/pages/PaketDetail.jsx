@@ -110,6 +110,12 @@ export default function PaketDetail({ paketId, goTo }) {
     muatSemua()
   }
 
+  async function resetHafalan() {
+    if (!confirm('Yakin mau reset semua hafalan di paket ini? Semua kata bakal balik jadi belum hafal.')) return
+    await supabase.from('kata').update({ hafal: false }).eq('paket_id', paketId)
+    muatSemua()
+  }
+
   function klikKartu(k) {
     if (hapusMode) hapusKata(k)
     else if (editMode) editKata(k)
@@ -268,6 +274,7 @@ export default function PaketDetail({ paketId, goTo }) {
         <button className="act-btn" onClick={tambahBagian}>＋ Bagian</button>
         <button className={`act-btn ${editMode ? 'active' : ''}`} onClick={toggleEditMode} title="Mode Edit">✏️</button>
         <button className={`act-btn ${hapusMode ? 'active' : ''}`} onClick={toggleHapusMode} title="Mode Hapus Kata">🗑️</button>
+        <button className="icon-btn danger" onClick={resetHafalan} title="Reset Hafalan" style={{ marginLeft: 'auto' }}>↺</button>
       </div>
 
       {showForm && (
