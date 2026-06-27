@@ -5,7 +5,7 @@ function normalisasiJP(s) {
   return String(s).trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
 }
 
-export default function PaketDetail({ paketId, goTo, userId }) {
+export default function PaketDetail({ paketId, goTo }) {
   const [paket, setPaket] = useState(null)
   const [kataList, setKataList] = useState([])
   const [flipped, setFlipped] = useState(new Set())
@@ -50,7 +50,6 @@ export default function PaketDetail({ paketId, goTo, userId }) {
     const { data } = await supabase
       .from('kata')
       .select('jp, paket:paket_id (nama, tanggal)')
-      .eq('user_id', userId)
     if (!data) return null
     const match = data.find(row => normalisasiJP(row.jp) === norm)
     if (!match) return null
@@ -62,7 +61,7 @@ export default function PaketDetail({ paketId, goTo, userId }) {
     const ketemu = await cekDuplikat(jp)
     if (ketemu) { setDup(ketemu); return }
     const { error } = await supabase.from('kata').insert({
-      paket_id: paketId, jp: jp.trim(), arti: arti.trim(), user_id: userId,
+      paket_id: paketId, jp: jp.trim(), arti: arti.trim(),
     })
     if (error) { alert('Gagal simpan: ' + error.message); return }
     setJp(''); setArti('')
@@ -83,7 +82,7 @@ export default function PaketDetail({ paketId, goTo, userId }) {
     if (!file) return
     if (file.type !== 'application/pdf') { alert('File harus PDF ya!'); return }
     setUploading(true)
-    const path = `${userId}/${paketId}-${Date.now()}.pdf`
+    const path = `${paketId}-${Date.now()}.pdf`
     const { error: upErr } = await supabase.storage.from('immersion-pdfs').upload(path, file, { upsert: true })
     if (upErr) { alert('Gagal upload: ' + upErr.message); setUploading(false); return }
     await supabase.from('paket').update({ pdf_path: path }).eq('id', paketId)
