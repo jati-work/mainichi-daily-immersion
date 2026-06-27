@@ -1,6 +1,11 @@
 import { supabase } from '../supabaseClient'
 
 export default function Cover({ goTo, jumlahPaket, jumlahKata, jumlahHariJurnal }) {
+  function kunciUlang() {
+    localStorage.removeItem('immersion-unlocked')
+    window.location.reload()
+  }
+
   return (
     <div className="cover">
       <div className="cover-inner">
@@ -33,14 +38,14 @@ export default function Cover({ goTo, jumlahPaket, jumlahKata, jumlahHariJurnal 
         </div>
 
         <button
-          onClick={() => supabase.auth.signOut()}
+          onClick={kunciUlang}
           style={{
             marginTop: 18, width: '100%', padding: '9px 10px', borderRadius: 10,
             border: '1.5px solid #c8ddc8', background: '#fff', cursor: 'pointer',
             fontSize: 11.5, fontWeight: 600, color: '#2d6a4a',
           }}
         >
-          🚪 Keluar
+          🔒 Kunci Ulang
         </button>
       </div>
     </div>
