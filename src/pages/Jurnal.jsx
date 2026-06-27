@@ -7,7 +7,7 @@ const NAMA_HARI = ['Min','Sen','Sel','Rab','Kam','Jum','Sab']
 function pad2(n) { return n < 10 ? '0' + n : '' + n }
 function dateKey(y, m, d) { return `${y}-${pad2(m + 1)}-${pad2(d)}` }
 
-export default function Jurnal({ goTo, userId }) {
+export default function Jurnal({ goTo }) {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
@@ -16,7 +16,7 @@ export default function Jurnal({ goTo, userId }) {
   const [editText, setEditText] = useState('')
 
   async function muat() {
-    const { data } = await supabase.from('jurnal').select('tanggal, catatan').eq('user_id', userId)
+    const { data } = await supabase.from('jurnal').select('tanggal, catatan')
     const map = {}
     ;(data || []).forEach(r => { map[r.tanggal] = r.catatan })
     setEntries(map)
@@ -33,9 +33,9 @@ export default function Jurnal({ goTo, userId }) {
   async function simpan() {
     const text = editText.trim()
     if (text) {
-      await supabase.from('jurnal').upsert({ user_id: userId, tanggal: editKey, catatan: text }, { onConflict: 'user_id,tanggal' })
+      await supabase.from('jurnal').upsert({ tanggal: editKey, catatan: text }, { onConflict: 'tanggal' })
     } else {
-      await supabase.from('jurnal').delete().eq('user_id', userId).eq('tanggal', editKey)
+      await supabase.from('jurnal').delete().eq('tanggal', editKey)
     }
     setEditKey(null)
     muat()
