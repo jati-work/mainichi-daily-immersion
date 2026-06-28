@@ -277,7 +277,7 @@ async function tesLanjut() {
         <button className="act-btn" onClick={() => setShowForm(s => !s)}>＋ Kata</button>
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
         <div style={{ position: 'relative', marginLeft: 'auto' }}>
-          <button className="icon-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, letterSpacing: 1, lineHeight: 1 }}>···</button>
+          <button className="act-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya">⋯</button>
           {showMenu && (
             <div style={{
               position: 'absolute', right: 0, top: 36, background: '#fff', border: '1.5px solid #ddd',
