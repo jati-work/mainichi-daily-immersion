@@ -81,6 +81,7 @@ export default function App() {
   return (
     <Cover
       goTo={goTo}
+      openPaket={openPaket}
       jumlahPaket={ringkasan.jumlahPaket}
       jumlahKata={ringkasan.jumlahKata}
       jumlahHariJurnal={ringkasan.jumlahHariJurnal}
