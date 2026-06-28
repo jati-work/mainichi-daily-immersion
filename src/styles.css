@@ -108,7 +108,7 @@ button, input, textarea { font-family: inherit; }
 .act-btn:hover { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
 
 .grid-wrap { padding: 0 10px 30px; }
-.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 4px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
 .card { aspect-ratio: 1/1; cursor: pointer; perspective: 600px; border-radius: 7px; position: relative; }
 .card-inner { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform .28s ease; border-radius: 7px; }
 .card.flipped .card-inner { transform: rotateY(180deg); }
@@ -116,7 +116,7 @@ button, input, textarea { font-family: inherit; }
   position: absolute; inset: 0; backface-visibility: hidden; border-radius: 7px;
   display: flex; align-items: center; justify-content: center; padding: 6px; text-align: center;
 }
-.card-front { background: #fdfdfb; color: #1a1a1a; border: 1.5px solid #dde8dd; font-family: 'Noto Serif JP', serif; font-size: clamp(12px,2.2vw,18px); }
+.card-front { background: #fdfdfb; color: #1a1a1a; border: 1.5px solid #dde8dd; font-family: 'Noto Serif JP', serif; font-size: clamp(14px,2.6vw,22px); }
 .card-back { background: #e2f5e2; color: #0c3a1a; transform: rotateY(180deg); font-size: clamp(9px,1.5vw,11px); }
 .card.hafal .card-inner { opacity: .3; }
 
