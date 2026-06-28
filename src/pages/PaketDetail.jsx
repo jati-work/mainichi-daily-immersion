@@ -264,20 +264,7 @@ async function tesLanjut() {
         )}
         <div className="stats">{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
         <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali">←</button>
-      </div>
-
-<div className="actions">
-        <button className={`act-btn ${kartuMode === 'buka' ? 'active' : ''}`} onClick={() => setKartu('buka')}>Buka semua ▾</button>
-        <button className={`act-btn ${kartuMode === 'tutup' ? 'active' : ''}`} onClick={() => setKartu('tutup')}>Tutup semua ▴</button>
-        <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
-        <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
-        <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
-        <button className="act-btn" onClick={() => startTes('id-jp')}>📝 Tes ▾</button>
-        <button className="act-btn" onClick={() => startTes('jp-id')}>📝 Tes ▴</button>
-        <button className="act-btn" onClick={() => setShowForm(s => !s)}>＋ Kata</button>
-        <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
-
-        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+        <div style={{ position: 'relative' }}>
           <button className="icon-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, letterSpacing: 1, lineHeight: 1 }}>···</button>
           {showMenu && (
             <div style={{
@@ -292,6 +279,18 @@ async function tesLanjut() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="actions">
+        <button className={`act-btn ${kartuMode === 'buka' ? 'active' : ''}`} onClick={() => setKartu('buka')}>Buka semua ▾</button>
+        <button className={`act-btn ${kartuMode === 'tutup' ? 'active' : ''}`} onClick={() => setKartu('tutup')}>Tutup semua ▴</button>
+        <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
+        <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
+        <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
+        <button className="act-btn" onClick={() => startTes('id-jp')}>📝 Tes ▾</button>
+        <button className="act-btn" onClick={() => startTes('jp-id')}>📝 Tes ▴</button>
+        <button className="act-btn" onClick={() => setShowForm(s => !s)}>＋ Kata</button>
+        <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
       </div>
 
       {showForm && (
