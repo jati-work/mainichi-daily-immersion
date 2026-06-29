@@ -23,6 +23,8 @@ export default function PaketDetail({ paketId, goTo }) {
   const [showForm, setShowForm] = useState(false)
   const [jp, setJp] = useState('')
   const [arti, setArti] = useState('')
+  const [bentukNatural, setBentukNatural] = useState('')
+  const [bunshuu, setBunshuu] = useState('')
   const [bagianInput, setBagianInput] = useState('')
   const [dup, setDup] = useState(null)
   const [showPdf, setShowPdf] = useState(false)
@@ -53,17 +55,17 @@ export default function PaketDetail({ paketId, goTo }) {
 
   const bagianList = paket?.bagian_list || []
 
-function toggleFlip(id) {
-  const next = new Set(flipped)
-  if (next.has(id)) next.delete(id); else next.add(id)
-  setFlipped(next)
-  setKartuMode(null)
-}
+  function toggleFlip(id) {
+    const next = new Set(flipped)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    setFlipped(next)
+    setKartuMode(null)
+  }
 
-async function toggleHafal(k) {
-  await supabase.from('kata').update({ hafal: !k.hafal }).eq('id', k.id)
-  muatSemua()
-}
+  async function toggleHafal(k) {
+    await supabase.from('kata').update({ hafal: !k.hafal }).eq('id', k.id)
+    muatSemua()
+  }
 
   async function cekDuplikat(jpText) {
     const norm = normalisasiJP(jpText)
@@ -81,9 +83,10 @@ async function toggleHafal(k) {
     if (ketemu) { setDup(ketemu); return }
     const { error } = await supabase.from('kata').insert({
       paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
+      bentuk_natural: bentukNatural.trim(), bunshuu: bunshuu.trim(),
     })
     if (error) { alert('Gagal simpan: ' + error.message); return }
-    setJp(''); setArti('')
+    setJp(''); setArti(''); setBentukNatural(''); setBunshuu('')
     muatSemua()
   }
 
@@ -126,12 +129,19 @@ async function toggleHafal(k) {
   }
 
   async function editKata(k) {
-    const jpBaru = prompt('Edit kata JP:', k.jp)
+    const jpBaru = prompt('Edit kata JP (dasar):', k.jp)
     if (jpBaru === null) return
+    const bentukNaturalBaru = prompt('Edit bentuk natural (opsional, kosongin kalau gak ada):', k.bentuk_natural || '')
+    if (bentukNaturalBaru === null) return
     const artiBaru = prompt('Edit arti ID:', k.arti)
     if (artiBaru === null) return
-    if (!jpBaru.trim() || !artiBaru.trim()) { alert('Nggak boleh kosong ya!'); return }
-    await supabase.from('kata').update({ jp: jpBaru.trim(), arti: artiBaru.trim() }).eq('id', k.id)
+    const bunshuuBaru = prompt('Edit bunshuu/komponen kanji, romaji (opsional):', k.bunshuu || '')
+    if (bunshuuBaru === null) return
+    if (!jpBaru.trim() || !artiBaru.trim()) { alert('Kata JP dan arti gak boleh kosong ya!'); return }
+    await supabase.from('kata').update({
+      jp: jpBaru.trim(), arti: artiBaru.trim(),
+      bentuk_natural: bentukNaturalBaru.trim(), bunshuu: bunshuuBaru.trim(),
+    }).eq('id', k.id)
     muatSemua()
   }
 
@@ -199,8 +209,14 @@ async function toggleHafal(k) {
           className="card-inner" onClick={() => klikKartu(k)}
           style={{ boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : 'none' }}
         >
-          <div className="card-front">{k.jp}</div>
-          <div className="card-back">{k.arti}</div>
+          <div className="card-front">
+            <div>{k.jp}</div>
+            {k.bentuk_natural && <div style={{ marginTop: 4, fontSize: '0.8em', opacity: 0.75 }}>{k.bentuk_natural}</div>}
+          </div>
+          <div className="card-back">
+            <div>{k.arti}</div>
+            {k.bunshuu && <div style={{ marginTop: 4, fontSize: '0.75em', opacity: 0.8, fontFamily: "'DM Sans', sans-serif" }}>{k.bunshuu}</div>}
+          </div>
         </div>
         <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); toggleHafal(k) }}>✓</button>
       </div>
@@ -252,8 +268,15 @@ async function toggleHafal(k) {
     const val = tes.input.trim()
     if (!val) return
     let benar = false
-    if (tes.dir === 'id-jp') benar = val === w.jp
-    else benar = w.arti.split(/[/;]/).map(normalisasiID).some(p => p === normalisasiID(val))
+    if (tes.dir === 'id-jp') {
+      // soal: arti → jawaban diterima kalau cocok sama kanji dasar ATAU bentuk natural
+      benar = val === w.jp || (!!w.bentuk_natural && val === w.bentuk_natural)
+    } else {
+      // soal: kanji → jawaban diterima kalau cocok sama arti ATAU bunshuu
+      const cocokArti = w.arti.split(/[/;]/).map(normalisasiID).some(p => p === normalisasiID(val))
+      const cocokBunshuu = !!w.bunshuu && normalisasiID(val) === normalisasiID(w.bunshuu)
+      benar = cocokArti || cocokBunshuu
+    }
     setTes(t => ({
       ...t, answered: true, salah: !benar,
       correct: t.correct + (benar ? 1 : 0),
@@ -261,17 +284,17 @@ async function toggleHafal(k) {
       benarIds: benar ? [...t.benarIds, w.id] : t.benarIds,
     }))
   }
-async function tesLanjut() {
-  if (tes.idx + 1 >= tes.words.length) {
-    if (tes.benarIds.length > 0) {
-      await Promise.all(tes.benarIds.map(id => supabase.from('kata').update({ hafal: true }).eq('id', id)))
-      muatSemua()
+  async function tesLanjut() {
+    if (tes.idx + 1 >= tes.words.length) {
+      if (tes.benarIds.length > 0) {
+        await Promise.all(tes.benarIds.map(id => supabase.from('kata').update({ hafal: true }).eq('id', id)))
+        muatSemua()
+      }
+      setTes(t => ({ ...t, idx: t.idx + 1 }))
+    } else {
+      setTes(t => ({ ...t, idx: t.idx + 1, answered: false, input: '', salah: false }))
     }
-    setTes(t => ({ ...t, idx: t.idx + 1 }))
-  } else {
-    setTes(t => ({ ...t, idx: t.idx + 1, answered: false, input: '', salah: false }))
   }
-}
   function tutupTes() { setTes(null) }
 
   if (!paket) return <div style={{ padding: 40, textAlign: 'center', color: '#9abaa8' }}>Memuat...</div>
@@ -335,14 +358,20 @@ async function tesLanjut() {
               {bagianList.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           )}
-<div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-  <input placeholder="Kata JP (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
-    style={{ flex: 1.2, padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
-  <input placeholder="Arti ID" value={arti} onChange={e => setArti(e.target.value)}
-    onKeyDown={e => e.key === 'Enter' && simpanKata()}
-    style={{ flex: 1, padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-  <button className="act-btn active" onClick={simpanKata} style={{ whiteSpace: 'nowrap' }}>Simpan</button>
-</div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+            <input placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
+              style={{ flex: 1, padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
+            <input placeholder="Bentuk natural (opsional)" value={bentukNatural} onChange={e => setBentukNatural(e.target.value)}
+              style={{ flex: 1, padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input placeholder="Arti ID" value={arti} onChange={e => setArti(e.target.value)}
+              style={{ flex: 1, padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+            <input placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && simpanKata()}
+              style={{ flex: 1, padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+            <button className="act-btn active" onClick={simpanKata} style={{ whiteSpace: 'nowrap' }}>Simpan</button>
+          </div>
         </div>
       )}
 
@@ -425,7 +454,7 @@ async function tesLanjut() {
               <>
                 <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{tes.idx + 1} / {tes.words.length} · ✓ {tes.correct} · ✗ {tes.wrong}</div>
                 <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>
-                  {tes.dir === 'id-jp' ? 'Tulis dalam huruf Jepang:' : 'Artinya dalam bahasa Indonesia:'}
+                  {tes.dir === 'id-jp' ? 'Tulis dalam huruf Jepang:' : 'Artinya dalam bahasa Indonesia (atau bunshuu):'}
                 </div>
                 <div style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, fontWeight: 600, marginBottom: 14, textAlign: 'center' }}>
                   {tes.dir === 'id-jp' ? tes.words[tes.idx].arti : tes.words[tes.idx].jp}
@@ -438,7 +467,11 @@ async function tesLanjut() {
                 />
                 {tes.answered && tes.salah && (
                   <div style={{ textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8 }}>
-                    Jawaban: <b>{tes.dir === 'id-jp' ? tes.words[tes.idx].jp : tes.words[tes.idx].arti}</b>
+                    Jawaban: <b>
+                      {tes.dir === 'id-jp'
+                        ? tes.words[tes.idx].jp + (tes.words[tes.idx].bentuk_natural ? ` (atau: ${tes.words[tes.idx].bentuk_natural})` : '')
+                        : tes.words[tes.idx].arti + (tes.words[tes.idx].bunshuu ? ` (atau bunshuu: ${tes.words[tes.idx].bunshuu})` : '')}
+                    </b>
                   </div>
                 )}
                 <div className="modal-btns">
