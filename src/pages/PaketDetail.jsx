@@ -42,6 +42,18 @@ export default function PaketDetail({ paketId, goTo }) {
   const [hapusMode, setHapusMode] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showTesBawah, setShowTesBawah] = useState(false)
+
+  useEffect(() => {
+  function handleClickOutside(e) {
+    if (!e.target.closest('[data-dropdown]')) {
+      setShowMenu(false)
+      setShowTesBawah(false)
+    }
+  }
+  document.addEventListener('mousedown', handleClickOutside)
+  return () => document.removeEventListener('mousedown', handleClickOutside)
+}, [])
+  
   const [showTesAtas, setShowTesAtas] = useState(false)
 
   // ----- tes (quiz) -----
@@ -336,7 +348,7 @@ export default function PaketDetail({ paketId, goTo }) {
         <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
         <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
         <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowTesBawah(s => !s)}>📝 Tes</button>
           {showTesBawah && (
             <div style={{ position: 'absolute', left: 0, top: 36, background: '#fff', border: '1.5px solid #ddd', borderRadius: 10, padding: 6, display: 'flex', flexDirection: 'column', gap: 4, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 20, minWidth: 200 }}>
@@ -356,7 +368,7 @@ export default function PaketDetail({ paketId, goTo }) {
         <button className="act-btn" onClick={tambahBagian}>＋ Bagian</button>
         <button className="act-btn" onClick={() => setShowForm(s => !s)}>＋ Kata</button>
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
-        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+        <div style={{ position: 'relative', marginLeft: 'auto' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya">⋯</button>
           {showMenu && (
             <div style={{
