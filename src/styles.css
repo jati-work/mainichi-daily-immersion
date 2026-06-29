@@ -114,7 +114,7 @@ button, input, textarea { font-family: inherit; }
 .card.flipped .card-inner { transform: rotateY(180deg); }
 .card-front, .card-back {
   position: absolute; inset: 0; backface-visibility: hidden; border-radius: 7px;
-  display: flex; align-items: center; justify-content: center; padding: 6px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px; text-align: center;
 }
 .card-front { background: #fdfdfb; color: #1a1a1a; border: 1.5px solid #dde8dd; font-family: 'Noto Serif JP', serif; font-size: clamp(14px,2.6vw,22px); }
 .card-back { background: #e2f5e2; color: #0c3a1a; transform: rotateY(180deg); font-size: clamp(9px,1.5vw,11px); }
