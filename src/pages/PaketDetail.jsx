@@ -209,14 +209,8 @@ export default function PaketDetail({ paketId, goTo }) {
           className="card-inner" onClick={() => klikKartu(k)}
           style={{ boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : 'none' }}
         >
-          <div className="card-front">
-            <div>{k.jp}</div>
-            {k.bentuk_natural && <div style={{ marginTop: 4, fontSize: '0.8em', opacity: 0.75 }}>{k.bentuk_natural}</div>}
-          </div>
-          <div className="card-back">
-            <div>{k.arti}</div>
-            {k.bunshuu && <div style={{ marginTop: 4, fontSize: '0.75em', opacity: 0.8, fontFamily: "'DM Sans', sans-serif" }}>{k.bunshuu}</div>}
-          </div>
+          <div className="card-front">{k.jp}</div>
+          <div className="card-back">{k.arti}</div>
         </div>
         <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); toggleHafal(k) }}>✓</button>
       </div>
