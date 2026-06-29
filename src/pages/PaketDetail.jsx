@@ -343,7 +343,7 @@ export default function PaketDetail({ paketId, goTo }) {
           <button className="act-btn" onClick={() => setShowTesAtas(s => !s)}>📝 Tes ▴</button>
           {showTesAtas && (
             <div style={{ position: 'absolute', left: 0, top: 36, background: '#fff', border: '1.5px solid #ddd', borderRadius: 10, padding: 6, display: 'flex', flexDirection: 'column', gap: 4, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 20, minWidth: 180 }}>
-              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('jp-arti'); setShowTesAtas(false) }}>JKanji Dasar → Arti/Bunshuu</button>
+              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('jp-arti'); setShowTesAtas(false) }}>Kanji Dasar → Arti/Bunshuu</button>
               <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('natural-arti'); setShowTesAtas(false) }}>Kanji Natural → Arti/Bunshuu</button>
             </div>
           )}
