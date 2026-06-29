@@ -337,7 +337,7 @@ export default function PaketDetail({ paketId, goTo }) {
         <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
         <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
         <div style={{ position: 'relative' }}>
-          <button className="act-btn" onClick={() => { setShowTesBawah(s => !s); setShowTesAtas(false) }}>📝 Tes ▾</button>
+          <button className="act-btn" onClick={() => setShowTesBawah(s => !s)}>📝 Tes</button>
           {showTesBawah && (
             <div style={{ position: 'absolute', left: 0, top: 36, background: '#fff', border: '1.5px solid #ddd', borderRadius: 10, padding: 6, display: 'flex', flexDirection: 'column', gap: 4, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 20, minWidth: 200 }}>
               <div style={{ fontSize: 10, color: '#9abaa8', padding: '2px 6px', letterSpacing: '.06em', textTransform: 'uppercase' }}>Soal → Jawaban</div>
