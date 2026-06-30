@@ -452,7 +452,7 @@ export default function PaketDetail({ paketId, goTo }) {
           <div className="modal-icon">🔁</div>
           <div className="modal-title">Kata Ini Udah Pernah Dicatat!</div>
           <div className="modal-desc">
-            Kata ini udah ada di paket <b>{dup?.nama} di dalam {dup?.tanggal ? ` (${dup.tanggal})` : ''}</b>.<br /><br />
+            Kata ini udah ada di paket <b>{dup?.nama}{dup?.tanggal ? ` (${dup.tanggal})` : ''}</b>.<br /><br />
             Ayo inget-inget! Ini active recall — coba diingat lagi artinya sebelum buka paket lamanya. 🌱
           </div>
           <div className="modal-btns">
