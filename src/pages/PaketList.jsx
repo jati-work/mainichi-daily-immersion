@@ -64,12 +64,12 @@ export default function PaketList({ goTo, openPaket }) {
         <div style="font-size:11px; color:#7aaa8a; margin-bottom:20px;">Diekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${data.length} kata</div>`
       pakets.forEach(([nama, { items }]) => {
         html += `<div style="font-size:13px; font-weight:700; color:#1a1a1a; margin-top:18px; margin-bottom:8px; border-bottom:1.5px solid #b8d8b8; padding-bottom:4px;">${nama}</div>`
-        items.forEach(it => {
-          html += `<div style="display:flex; gap:10px; font-size:12px; padding:3px 0;">
-            <div style="width:140px; font-family:'Noto Serif JP', serif; font-size:14px;">${it.jp}</div>
-            <div style="color:#444;">${it.arti}</div>
-          </div>`
-        })
+items.forEach(it => {
+  html += `<div style="display:grid; grid-template-columns:200px 1fr; gap:14px; align-items:start; font-size:12px; padding:8px 0; border-bottom:1px solid #e5e5e5;">
+    <div style="font-family:'Noto Serif JP', serif; font-size:14px; line-height:1.4;">${it.jp}</div>
+    <div style="color:#444; line-height:1.4;">${it.arti}</div>
+  </div>`
+})
       })
       wrap.innerHTML = html
       document.body.appendChild(wrap)
