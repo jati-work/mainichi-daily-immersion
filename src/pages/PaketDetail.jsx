@@ -81,14 +81,14 @@ export default function PaketDetail({ paketId, goTo }) {
     muatSemua()
   }
 
-  async function cekDuplikat(jpText) {
+  async function cekDuplikat(jpText, excludeId = null) {
     const norm = normalisasiJP(jpText)
     if (!norm) return null
-    const { data } = await supabase.from('kata').select('jp, paket:paket_id (nama, tanggal)')
+    const { data } = await supabase.from('kata').select('id, jp, paket:paket_id (nama, tanggal)')
     if (!data) return null
-    const match = data.find(row => normalisasiJP(row.jp) === norm)
+    const match = data.find(row => row.id !== excludeId && normalisasiJP(row.jp) === norm)
     if (!match) return null
-    return { nama: match.paket?.nama, tanggal: match.paket?.tanggal }
+    return { jp: match.jp, nama: match.paket?.nama, tanggal: match.paket?.tanggal }
   }
 
   async function simpanKata() {
@@ -152,6 +152,8 @@ export default function PaketDetail({ paketId, goTo }) {
     const bunshuuBaru = prompt('Edit bunshuu/komponen kanji, romaji (opsional):', k.bunshuu || '')
     if (bunshuuBaru === null) return
     if (!jpBaru.trim() || !artiBaru.trim()) { alert('Kata JP dan arti gak boleh kosong ya!'); return }
+    const ketemu = await cekDuplikat(jpBaru, k.id)
+    if (ketemu) { setDup(ketemu); return }
     await supabase.from('kata').update({
       jp: jpBaru.trim(), arti: artiBaru.trim(),
       bentuk_natural: bentukNaturalBaru.trim(), bunshuu: bunshuuBaru.trim(),
