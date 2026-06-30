@@ -238,19 +238,19 @@ export default function PaketList({ goTo, openPaket }) {
             <div className="cover-sub">kosakata dari keseharian</div>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              className="icon-btn" title="Download PDF (buat dibaca)" onClick={exportSemuaHafalan}
-              disabled={exportLoading}
-              style={{ width: 36, height: 36, fontSize: 16 }}
-            >
-              {exportLoading ? '⏳' : '📄'}
-            </button>
-            <button
-              className="icon-btn" title="Download TXT (buat dikasih ke AI)" onClick={exportTxtHafalan}
-              style={{ width: 36, height: 36, fontSize: 16 }}
-            >
-              📝
-            </button>
+<button
+  className="icon-btn" title="Download PDF (buat dibaca)" onClick={exportSemuaHafalan}
+  disabled={exportLoading}
+  style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
+>
+  {exportLoading ? '⏳' : 'PDF'}
+</button>
+<button
+  className="icon-btn" title="Download TXT (buat dikasih ke AI)" onClick={exportTxtHafalan}
+  style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
+>
+  MD
+</button>
           </div>
         </div>
 
