@@ -27,6 +27,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [bunshuu, setBunshuu] = useState('')
   const [bagianInput, setBagianInput] = useState('')
   const [dup, setDup] = useState(null)
+  const [editingId, setEditingId] = useState(null)
   const [showPdf, setShowPdf] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
@@ -93,15 +94,34 @@ export default function PaketDetail({ paketId, goTo }) {
 
   async function simpanKata() {
     if (!jp.trim() || !arti.trim()) { alert('Isi kata JP dan artinya dulu ya!'); return }
-    const ketemu = await cekDuplikat(jp)
+    const ketemu = await cekDuplikat(jp, editingId)
     if (ketemu) { setDup(ketemu); return }
-    const { error } = await supabase.from('kata').insert({
-      paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
-      contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
-    })
-    if (error) { alert('Gagal simpan: ' + error.message); return }
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu('')
+    if (editingId) {
+      const { error } = await supabase.from('kata').update({
+        jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
+        contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
+      }).eq('id', editingId)
+      if (error) { alert('Gagal update: ' + error.message); return }
+    } else {
+      const { error } = await supabase.from('kata').insert({
+        paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
+        contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
+      })
+      if (error) { alert('Gagal simpan: ' + error.message); return }
+    }
+    batalForm()
     muatSemua()
+  }
+
+  function batalForm() {
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setBagianInput('')
+    setEditingId(null)
+    setShowForm(false)
+  }
+
+  function toggleForm() {
+    if (showForm) batalForm()
+    else setShowForm(true)
   }
 
   async function tambahBagian() {
@@ -142,23 +162,14 @@ export default function PaketDetail({ paketId, goTo }) {
     muatSemua()
   }
 
-  async function editKata(k) {
-    const jpBaru = prompt('Edit kata JP (dasar):', k.jp)
-    if (jpBaru === null) return
-    const contohKalimatBaru = prompt('Edit contoh kalimat (opsional, kosongin kalau gak ada):', k.contoh_kalimat || '')
-    if (contohKalimatBaru === null) return
-    const artiBaru = prompt('Edit arti ID:', k.arti)
-    if (artiBaru === null) return
-    const bunshuuBaru = prompt('Edit bunshuu/komponen kanji, romaji (opsional):', k.bunshuu || '')
-    if (bunshuuBaru === null) return
-    if (!jpBaru.trim() || !artiBaru.trim()) { alert('Kata JP dan arti gak boleh kosong ya!'); return }
-    const ketemu = await cekDuplikat(jpBaru, k.id)
-    if (ketemu) { setDup(ketemu); return }
-    await supabase.from('kata').update({
-      jp: jpBaru.trim(), arti: artiBaru.trim(),
-      contoh_kalimat: contohKalimatBaru.trim(), bunshuu: bunshuuBaru.trim(),
-    }).eq('id', k.id)
-    muatSemua()
+  function mulaiEditKata(k) {
+    setEditingId(k.id)
+    setJp(k.jp)
+    setArti(k.arti)
+    setContohKalimat(k.contoh_kalimat || '')
+    setBunshuu(k.bunshuu || '')
+    setBagianInput(k.bagian || '')
+    setShowForm(true)
   }
 
   async function hapusKata(k) {
@@ -175,7 +186,7 @@ export default function PaketDetail({ paketId, goTo }) {
 
   function klikKartu(k) {
     if (hapusMode) hapusKata(k)
-    else if (editMode) editKata(k)
+    else if (editMode) mulaiEditKata(k)
     else toggleFlip(k.id)
   }
 
@@ -363,7 +374,7 @@ export default function PaketDetail({ paketId, goTo }) {
           )}
         </div>
         <button className="act-btn" onClick={tambahBagian}>＋ Bagian</button>
-        <button className="act-btn" onClick={() => setShowForm(s => !s)}>＋ Kata</button>
+        <button className={`act-btn ${showForm ? 'active' : ''}`} onClick={toggleForm}>{editingId ? '✏️ Edit Kata' : '＋ Kata'}</button>
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
         <div style={{ position: 'relative', marginLeft: 'auto' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya">⋯</button>
@@ -387,6 +398,9 @@ export default function PaketDetail({ paketId, goTo }) {
 
       {showForm && (
         <div style={{ background: '#f0f7f0', borderRadius: 10, padding: 14, margin: '0 10px 10px', border: '1.5px solid #b8d8b8' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#2d6a4a', marginBottom: 8, letterSpacing: '.04em', textTransform: 'uppercase' }}>
+            {editingId ? '✏️ Edit Kata' : '＋ Tambah Kata'}
+          </div>
           {bagianList.length > 0 && (
             <select value={bagianInput} onChange={e => setBagianInput(e.target.value)}
               style={{ width: '100%', padding: 7, borderRadius: 8, border: '1.5px solid #b8d8b8', marginBottom: 8, fontSize: 12 }}>
@@ -404,8 +418,13 @@ export default function PaketDetail({ paketId, goTo }) {
             <input placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && simpanKata()}
               style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-            <button className="act-btn active" onClick={simpanKata}
-              style={{ gridColumn: '1 / -1', padding: 10, fontWeight: 600 }}>Simpan</button>
+            <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6 }}>
+              {editingId && (
+                <button className="act-btn" onClick={batalForm} style={{ flex: 1, padding: 10 }}>Batal</button>
+              )}
+              <button className="act-btn active" onClick={simpanKata}
+                style={{ flex: 1, padding: 10, fontWeight: 600 }}>{editingId ? 'Update' : 'Simpan'}</button>
+            </div>
           </div>
         </div>
       )}
