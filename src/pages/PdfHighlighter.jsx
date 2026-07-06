@@ -48,15 +48,15 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode }) {
           placeholder="Tulis catatan..."
           style={{
             display: 'block', resize: 'both', minWidth: 120, minHeight: 30,
-            fontSize: 15, padding: '5px 7px', border: '1.5px dashed #2d6a4a',
+            fontSize: 13, padding: '5px 7px', border: '1.5px dashed #2d6a4a',
             borderRadius: 6, background: 'rgba(255,255,255,.95)', color: data.color || '#2d6a4a',
-            fontFamily: "'Noto Serif JP', serif",
+            fontFamily: "'Noto Serif JP', serif", fontWeight: 400,
           }}
         />
       ) : (
         <div
           style={{
-            fontSize: 15, fontWeight: 600, color: data.color || '#2d6a4a', cursor: hapusMode ? 'pointer' : 'text',
+            fontSize: 13, fontWeight: 400, color: data.color || '#2d6a4a', cursor: hapusMode ? 'pointer' : 'text',
             whiteSpace: 'pre-wrap', fontFamily: "'Noto Serif JP', serif", padding: '2px 4px',
           }}
         >
@@ -236,14 +236,18 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
 
   return (
     <div className="pdf-panel">
-      <div className="pdf-panel-header" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <button className="icon-btn" onClick={() => gantiHalaman(-1)} disabled={pageNum <= 1}>‹</button>
-        <div style={{ fontSize: 12, color: '#fff', minWidth: 56, textAlign: 'center' }}>{pageNum} / {numPages}</div>
-        <button className="icon-btn" onClick={() => gantiHalaman(1)} disabled={pageNum >= numPages}>›</button>
+      <div className="pdf-panel-header" style={{ gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <button className="icon-btn" onClick={() => gantiHalaman(-1)} disabled={pageNum <= 1}>‹</button>
+          <div style={{ fontSize: 12, color: '#fff', minWidth: 44, textAlign: 'center' }}>{pageNum} / {numPages}</div>
+          <button className="icon-btn" onClick={() => gantiHalaman(1)} disabled={pageNum >= numPages}>›</button>
+        </div>
 
-        <button className="icon-btn" onClick={() => setScale(s => Math.max(s - 0.2, 0.6))}>－</button>
-        <div style={{ fontSize: 12, color: '#fff', minWidth: 40, textAlign: 'center' }}>{Math.round(scale * 100)}%</div>
-        <button className="icon-btn" onClick={() => setScale(s => Math.min(s + 0.2, 3))}>＋</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <button className="icon-btn" onClick={() => setScale(s => Math.max(s - 0.2, 0.6))}>－</button>
+          <div style={{ fontSize: 12, color: '#fff', minWidth: 36, textAlign: 'center' }}>{Math.round(scale * 100)}%</div>
+          <button className="icon-btn" onClick={() => setScale(s => Math.min(s + 0.2, 3))}>＋</button>
+        </div>
 
         <button
           className="icon-btn"
