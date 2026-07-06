@@ -236,84 +236,87 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
 
   return (
     <div className="pdf-panel">
-      <div className="pdf-panel-header" style={{ gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button className="icon-btn" onClick={() => gantiHalaman(-1)} disabled={pageNum <= 1}>‹</button>
+      <div className="pdf-panel-header" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button className="icon-btn" onClick={() => setScale(s => Math.max(s - 0.2, 0.6))}>－</button>
+            <div style={{ fontSize: 12, color: '#fff', minWidth: 36, textAlign: 'center' }}>{Math.round(scale * 100)}%</div>
+            <button className="icon-btn" onClick={() => setScale(s => Math.min(s + 0.2, 3))}>＋</button>
+          </div>
+
+          <button
+            className="icon-btn"
+            onClick={() => setMode(m => (m === 'highlight' ? null : 'highlight'))}
+            title="Highlight"
+            style={{ background: mode === 'highlight' ? '#2d6a4a' : '#fff', color: mode === 'highlight' ? '#2d6a4a' : '#fff', border: '1.5px solid #2d6a4a' }}
+          >🖍️</button>
+          <button
+            className="icon-btn"
+            onClick={() => setMode(m => (m === 'text' ? null : 'text'))}
+            title="Catatan teks"
+            style={{
+              background: mode === 'text' ? '#2d6a4a' : '#fff',
+              color: mode === 'text' ? '#fff' : '#2d6a4a',
+              border: '1.5px solid #2d6a4a',
+              fontWeight: 700, fontStyle: 'italic', fontFamily: 'Georgia, serif', fontSize: 13,
+            }}
+          >abc</button>
+          <button
+            className="icon-btn"
+            onClick={() => setMode(m => (m === 'hapus' ? null : 'hapus'))}
+            title="Mode hapus anotasi"
+            style={{
+              background: mode === 'hapus' ? '#c0392b' : '#fff',
+              color: mode === 'hapus' ? '#fff' : '#c0392b',
+              border: '1.5px solid #c0392b',
+            }}
+          >🗑️</button>
+
+          {mode === 'highlight' && WARNA_HIGHLIGHT.map(w => (
+            <button
+              key={w}
+              onClick={() => setWarnaHighlight(w)}
+              title={w}
+              style={{
+                width: 20, height: 20, borderRadius: '50%', background: w, cursor: 'pointer',
+                border: warnaHighlight === w ? '2px solid #fff' : '1px solid rgba(255,255,255,.5)',
+              }}
+            />
+          ))}
+          {mode === 'text' && WARNA_TEKS.map(w => (
+            <button
+              key={w}
+              onClick={() => setWarnaTeks(w)}
+              title={w}
+              style={{
+                width: 20, height: 20, borderRadius: '50%', background: w, cursor: 'pointer',
+                border: warnaTeks === w ? '2px solid #fff' : '1px solid rgba(255,255,255,.5)',
+              }}
+            />
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifySelf: 'center' }}>
+          <button className="icon-btn" onClick={() => gantiHalaman(-1)} disabled={pageNum <= 1} style={{ width: 34, height: 34, fontSize: 18 }}>‹</button>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: '3px 10px 3px 3px',
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: '4px 14px 4px 4px',
           }}>
             <span style={{
-              background: '#1a1a1a', color: '#fff', fontSize: 12, fontWeight: 600,
-              borderRadius: 12, padding: '3px 10px', minWidth: 16, textAlign: 'center',
+              background: '#1a1a1a', color: '#fff', fontSize: 15, fontWeight: 600,
+              borderRadius: 14, padding: '4px 13px', minWidth: 20, textAlign: 'center',
             }}>{pageNum}</span>
-            <span style={{ fontSize: 12, color: '#fff', opacity: 0.85 }}>/ {numPages}</span>
+            <span style={{ fontSize: 15, color: '#fff', opacity: 0.85 }}>/ {numPages}</span>
           </div>
-          <button className="icon-btn" onClick={() => gantiHalaman(1)} disabled={pageNum >= numPages}>›</button>
+          <button className="icon-btn" onClick={() => gantiHalaman(1)} disabled={pageNum >= numPages} style={{ width: 34, height: 34, fontSize: 18 }}>›</button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <button className="icon-btn" onClick={() => setScale(s => Math.max(s - 0.2, 0.6))}>－</button>
-          <div style={{ fontSize: 12, color: '#fff', minWidth: 36, textAlign: 'center' }}>{Math.round(scale * 100)}%</div>
-          <button className="icon-btn" onClick={() => setScale(s => Math.min(s + 0.2, 3))}>＋</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end' }}>
+          {onHapusPdf && (
+            <button className="icon-btn danger" onClick={() => setShowKonfirmasiHapus(true)} title="Hapus PDF">🗑️</button>
+          )}
+          <button className="icon-btn" onClick={onClose}>✕</button>
         </div>
-
-        <button
-          className="icon-btn"
-          onClick={() => setMode(m => (m === 'highlight' ? null : 'highlight'))}
-          title="Highlight"
-          style={{ background: mode === 'highlight' ? '#2d6a4a' : '#fff', color: mode === 'highlight' ? '#2d6a4a' : '#fff', border: '1.5px solid #2d6a4a' }}
-        >🖍️</button>
-        <button
-          className="icon-btn"
-          onClick={() => setMode(m => (m === 'text' ? null : 'text'))}
-          title="Catatan teks"
-          style={{
-            background: mode === 'text' ? '#2d6a4a' : '#fff',
-            color: mode === 'text' ? '#fff' : '#2d6a4a',
-            border: '1.5px solid #2d6a4a',
-            fontWeight: 700, fontStyle: 'italic', fontFamily: 'Georgia, serif', fontSize: 13,
-          }}
-        >abc</button>
-        <button
-          className="icon-btn"
-          onClick={() => setMode(m => (m === 'hapus' ? null : 'hapus'))}
-          title="Mode hapus anotasi"
-          style={{
-            background: mode === 'hapus' ? '#c0392b' : '#fff',
-            color: mode === 'hapus' ? '#fff' : '#c0392b',
-            border: '1.5px solid #c0392b',
-          }}
-        >🗑️</button>
-
-        {mode === 'highlight' && WARNA_HIGHLIGHT.map(w => (
-          <button
-            key={w}
-            onClick={() => setWarnaHighlight(w)}
-            title={w}
-            style={{
-              width: 20, height: 20, borderRadius: '50%', background: w, cursor: 'pointer',
-              border: warnaHighlight === w ? '2px solid #fff' : '1px solid rgba(255,255,255,.5)',
-            }}
-          />
-        ))}
-        {mode === 'text' && WARNA_TEKS.map(w => (
-          <button
-            key={w}
-            onClick={() => setWarnaTeks(w)}
-            title={w}
-            style={{
-              width: 20, height: 20, borderRadius: '50%', background: w, cursor: 'pointer',
-              border: warnaTeks === w ? '2px solid #fff' : '1px solid rgba(255,255,255,.5)',
-            }}
-          />
-        ))}
-
-        <div style={{ flex: 1 }} />
-        {onHapusPdf && (
-          <button className="icon-btn danger" onClick={() => setShowKonfirmasiHapus(true)} title="Hapus PDF">🗑️</button>
-        )}
-        <button className="icon-btn" onClick={onClose}>✕</button>
       </div>
 
       <div className="pdf-panel-body" style={{ overflow: 'auto', display: 'flex', justifyContent: 'center' }}>
