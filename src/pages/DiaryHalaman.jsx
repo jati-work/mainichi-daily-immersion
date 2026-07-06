@@ -388,7 +388,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
             style={{ background: '#fff', border: '1.5px solid #2d6a4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           ><IconPlus color="#2d6a4a" size={16} /></button>
           <span style={{ fontSize: 11, color: '#1a1a1a', opacity: 0.6, minWidth: 80 }}>
-            {!terkunci && (saving ? 'Menyimpan...' : 'Tersimpan')}
+            {terkunci ? '🔒 Terkunci' : (saving ? 'Menyimpan...' : 'Tersimpan')}
           </span>
 
           {terkunci && (
@@ -485,9 +485,9 @@ export default function DiaryHalaman({ paketId, onClose }) {
         {loading ? (
           <div style={{ color: '#cde8d0', padding: 30 }}>Memuat diary...</div>
         ) : terkunci ? (
-          <div style={{ position: 'relative', width: '100%', maxWidth: 820, margin: '0 auto', display: 'inline-block', textAlign: 'left' }}>
+          <div style={{ position: 'relative', width: '100%', maxWidth: 820, margin: '0 auto', display: 'inline-block', textAlign: 'left', minHeight: '100%' }}>
             <div style={{
-              width: '100%', minHeight: 400, background: '#fff', padding: '36px 44px', fontSize: 17,
+              width: '100%', height: '100%', minHeight: '100%', background: '#fff', padding: '36px 44px', fontSize: 17,
               lineHeight: 1.9, color: '#1f2d24', fontFamily: "'Noto Serif JP', serif", whiteSpace: 'pre-wrap',
               boxShadow: '0 0 0 1px rgba(0,0,0,.05)', borderRadius: 4, boxSizing: 'border-box',
             }}>
