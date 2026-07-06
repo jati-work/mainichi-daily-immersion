@@ -14,11 +14,15 @@ export default function PaketList({ goTo, openPaket }) {
     setLoading(true)
     const { data, error } = await supabase
       .from('paket')
-      .select('id, nama, tanggal, urutan, urutan_grup, urutan_dalam_grup, pdf_path, kata(count)')
+      .select('id, nama, tanggal, urutan, urutan_grup, urutan_dalam_grup, pdf_path, kata(count), diary_pages(isi_teks)')
       .order('urutan_grup', { ascending: true })
       .order('urutan_dalam_grup', { ascending: true })
     if (!error && data) {
-      setPaketList(data.map(p => ({ ...p, jumlahKata: p.kata?.[0]?.count || 0 })))
+      setPaketList(data.map(p => ({
+        ...p,
+        jumlahKata: p.kata?.[0]?.count || 0,
+        adaIsiDiary: (p.diary_pages || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0),
+      })))
     }
     setLoading(false)
   }
@@ -122,7 +126,7 @@ export default function PaketList({ goTo, openPaket }) {
 
     let txt = `Kosakata Immersion — Daftar Hafalan\nDiekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${data.length} kata\n\n`
     pakets.forEach(([nama, { items }]) => {
-      txt += `${nama}\n`
+      txt += `**${nama}**\n`
       items.forEach(it => { txt += `${it.jp} — ${it.arti}\n` })
       txt += '\n'
     })
@@ -286,6 +290,7 @@ async function hapusGrup(namaGrup) {
           <div className="nama">
             <span>{p.nama}</span>
             {p.pdf_path && <span title="Ada PDF">📄</span>}
+            {p.adaIsiDiary && <span title="Ada catatan diary">📔</span>}
           </div>
           <div className="meta">
             <span>{p.jumlahKata} kata</span>
