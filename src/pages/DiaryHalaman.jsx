@@ -481,7 +481,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
         </div>
       </div>
 
-      <div className="pdf-panel-body" style={{ overflow: 'auto', display: 'block', textAlign: 'center', padding: 20 }}>
+      <div className="pdf-panel-body" style={{ overflow: 'auto', overflowY: 'scroll', scrollbarGutter: 'stable', display: 'block', textAlign: 'center', padding: 20 }}>
         {loading ? (
           <div style={{ color: '#cde8d0', padding: 30 }}>Memuat diary...</div>
         ) : terkunci ? (
