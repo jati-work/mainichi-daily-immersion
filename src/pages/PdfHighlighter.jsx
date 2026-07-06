@@ -110,7 +110,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [pdfDoc, setPdfDoc] = useState(null)
   const [numPages, setNumPages] = useState(0)
   const [pageNum, setPageNum] = useState(1)
-  const [scale, setScale] = useState(1.2)
+  const [scale, setScale] = useState(1)
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
