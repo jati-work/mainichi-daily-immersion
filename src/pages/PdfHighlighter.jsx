@@ -29,7 +29,7 @@ function IconDownload({ color = '#2d6a4a', size = 16 }) {
   )
 }
 
-function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode }) {
+function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah }) {
   const [text, setText] = useState(data.text || '')
   const [editing, setEditing] = useState(autoFocus || !data.text)
   const ref = useRef(null)
@@ -49,16 +49,35 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode }) {
     if (!editing) setEditing(true)
   }
 
+  function handleDragMouseDown(e) {
+    e.stopPropagation()
+    onPindah(data.id, e)
+  }
+
   return (
     <div
       onMouseDown={e => e.stopPropagation()}
       onClick={handleClick}
       style={{
         position: 'absolute', left: data.x * 100 + '%', top: data.y * 100 + '%', minWidth: 60,
-        outline: hapusMode ? '2px dashed #c0392b' : 'none', outlineOffset: 3, borderRadius: 4,
+        outline: hapusMode ? '2px dashed #c0392b' : editing ? '1.5px dashed #2d6a4a' : 'none',
+        outlineOffset: 3, borderRadius: 4,
         cursor: hapusMode ? 'pointer' : 'default',
       }}
     >
+      {editing && !hapusMode && (
+        <div
+          onMouseDown={handleDragMouseDown}
+          title="Geser catatan"
+          style={{
+            position: 'absolute', left: -18, top: 2, width: 16, height: 24,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'grab', color: '#2d6a4a', fontSize: 13, lineHeight: 1,
+            userSelect: 'none', background: 'rgba(255,255,255,.9)', borderRadius: 3,
+            border: '1px solid rgba(45,106,74,.4)',
+          }}
+        >⠿</div>
+      )}
       {editing && !hapusMode ? (
         <textarea
           ref={ref}
@@ -123,6 +142,8 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [editingTeksId, setEditingTeksId] = useState(null)
   const [showKonfirmasiHapus, setShowKonfirmasiHapus] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [draggingId, setDraggingId] = useState(null)
+  const [dragOffset, setDragOffset] = useState({ dx: 0, dy: 0 })
 
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -203,6 +224,25 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     }
   }
 
+  // ----- geser (drag) anotasi lewat pegangan -----
+  function mulaiDrag(id, e) {
+    const item = anotasi.find(a => a.id === id)
+    if (!item) return
+    const pos = posisiRelatif(e)
+    setDragOffset({ dx: pos.x - item.x, dy: pos.y - item.y })
+    setDraggingId(id)
+  }
+
+  async function selesaiDrag() {
+    if (!draggingId) return
+    const id = draggingId
+    const item = anotasi.find(a => a.id === id)
+    setDraggingId(null)
+    if (item) {
+      await supabase.from('pdf_highlights').update({ x: item.x, y: item.y }).eq('id', id)
+    }
+  }
+
   // ----- mode highlight: drag kotak -----
   function handleOverlayMouseDown(e) {
     if (mode === 'highlight') {
@@ -214,6 +254,13 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     }
   }
   function handleOverlayMouseMove(e) {
+    if (draggingId) {
+      const pos = posisiRelatif(e)
+      const nx = Math.min(Math.max(pos.x - dragOffset.dx, 0), 1)
+      const ny = Math.min(Math.max(pos.y - dragOffset.dy, 0), 1)
+      setAnotasi(a => a.map(item => (item.id === draggingId ? { ...item, x: nx, y: ny } : item)))
+      return
+    }
     if (!drawing) return
     const { x: curX, y: curY } = posisiRelatif(e)
     setDrawing(d => ({
@@ -225,6 +272,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     }))
   }
   async function handleOverlayMouseUp() {
+    if (draggingId) { await selesaiDrag(); return }
     if (!drawing) return
     const { x, y, width, height } = drawing
     setDrawing(null)
@@ -426,7 +474,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
               onMouseDown={handleOverlayMouseDown}
               onMouseMove={handleOverlayMouseMove}
               onMouseUp={handleOverlayMouseUp}
-              onMouseLeave={() => setDrawing(null)}
+              onMouseLeave={() => { setDrawing(null); selesaiDrag() }}
               style={{
                 position: 'absolute', inset: 0,
                 cursor: mode === 'highlight' ? 'crosshair' : mode === 'text' ? 'text' : 'default',
@@ -444,6 +492,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                   onSimpan={simpanTeks}
                   onHapus={hapusAnotasi}
                   hapusMode={mode === 'hapus'}
+                  onPindah={mulaiDrag}
                 />
               ))}
 
