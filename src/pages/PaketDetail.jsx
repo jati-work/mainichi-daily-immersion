@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import PdfHighlighter from './PdfHighlighter'
+import DiaryHalaman from './DiaryHalaman'
 
 function normalisasiJP(s) {
   return String(s).trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
@@ -30,6 +31,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [showPdf, setShowPdf] = useState(false)
+  const [showDiary, setShowDiary] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
 
@@ -200,6 +202,12 @@ export default function PaketDetail({ paketId, goTo }) {
     setHapusMode(false)
     setTes(null)
     setShowPdf(false)
+    setShowDiary(false)
+  }
+
+  function bukaDiary() {
+    tutupPanelLain()
+    setShowDiary(true)
   }
 
   function klikKartu(k) {
@@ -404,6 +412,7 @@ async function hapusPdf() {
         <button className="act-btn" onClick={tambahBagian}>＋ Bagian</button>
         <button className={`act-btn ${showForm ? 'active' : ''}`} onClick={toggleForm}>{editingId ? '✏️ Edit Kata' : '＋ Kata'}</button>
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
+        <button className={`act-btn ${showDiary ? 'active' : ''}`} onClick={bukaDiary} title="Buku Diary">📔</button>
         <div style={{ position: 'relative', marginLeft: 'auto' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya">⋯</button>
           {showMenu && (
@@ -529,6 +538,10 @@ async function hapusPdf() {
       </div>
     </div>
   )
+)}
+
+{showDiary && (
+  <DiaryHalaman paketId={paketId} onClose={() => setShowDiary(false)} />
 )}
 
       {tes && (
