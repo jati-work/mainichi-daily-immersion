@@ -300,13 +300,12 @@ export default function PaketDetail({ paketId, goTo }) {
     setShowPdf(true)
     muatSemua()
   }
-  async function hapusPdf() {
-    if (!confirm('Hapus PDF dari paket ini?')) return
-    if (paket.pdf_path) await supabase.storage.from('immersion-pdfs').remove([paket.pdf_path])
-    await supabase.from('paket').update({ pdf_path: null }).eq('id', paketId)
-    setShowPdf(false)
-    muatSemua()
-  }
+async function hapusPdf() {
+  if (paket.pdf_path) await supabase.storage.from('immersion-pdfs').remove([paket.pdf_path])
+  await supabase.from('paket').update({ pdf_path: null }).eq('id', paketId)
+  setShowPdf(false)
+  muatSemua()
+}
 
   function startTes(dir) {
     const sumber = (filterBagian !== 'all' ? kataList.filter(k => k.bagian === filterBagian) : kataList)
@@ -505,12 +504,13 @@ export default function PaketDetail({ paketId, goTo }) {
 
 {showPdf && (
   paket.pdf_path && pdfUrl ? (
-    <PdfHighlighter
-      paketId={paketId}
-      pdfPath={paket.pdf_path}
-      pdfUrl={pdfUrl}
-      onClose={() => setShowPdf(false)}
-    />
+<PdfHighlighter
+  paketId={paketId}
+  pdfPath={paket.pdf_path}
+  pdfUrl={pdfUrl}
+  onClose={() => setShowPdf(false)}
+  onHapusPdf={hapusPdf}
+/>
   ) : (
     <div className="pdf-panel">
       <div className="pdf-panel-header">
