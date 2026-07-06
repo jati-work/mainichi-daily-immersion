@@ -34,6 +34,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [showDiary, setShowDiary] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
+  const [adaIsiDiary, setAdaIsiDiary] = useState(false)
 
   // ----- filter & mode -----
   const [filterBagian, setFilterBagian] = useState('all')
@@ -74,7 +75,11 @@ export default function PaketDetail({ paketId, goTo }) {
     const { data: k } = await supabase.from('kata').select('*').eq('paket_id', paketId).order('created_at')
     setKataList(k || [])
   }
-  useEffect(() => { muatSemua() }, [paketId])
+  async function cekIsiDiary() {
+    const { data } = await supabase.from('diary_pages').select('isi_teks').eq('paket_id', paketId)
+    setAdaIsiDiary((data || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0))
+  }
+  useEffect(() => { muatSemua(); cekIsiDiary() }, [paketId])
 
   const bagianList = paket?.bagian_list || []
 
@@ -412,7 +417,7 @@ async function hapusPdf() {
         <button className="act-btn" onClick={tambahBagian}>＋ Bagian</button>
         <button className={`act-btn ${showForm ? 'active' : ''}`} onClick={toggleForm}>{editingId ? '✏️ Edit Kata' : '＋ Kata'}</button>
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
-        <button className={`act-btn ${showDiary ? 'active' : ''}`} onClick={bukaDiary} title="Buku Diary">📔</button>
+        <button className={`act-btn ${adaIsiDiary ? 'active' : ''}`} onClick={bukaDiary} title="Buku Diary">📔</button>
         <div style={{ position: 'relative', marginLeft: 'auto' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya">⋯</button>
           {showMenu && (
@@ -541,7 +546,7 @@ async function hapusPdf() {
 )}
 
 {showDiary && (
-  <DiaryHalaman paketId={paketId} onClose={() => setShowDiary(false)} />
+  <DiaryHalaman paketId={paketId} onClose={() => { setShowDiary(false); cekIsiDiary() }} />
 )}
 
       {tes && (
