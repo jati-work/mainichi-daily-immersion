@@ -8,10 +8,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 const WARNA_HIGHLIGHT = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
 const WARNA_TEKS = ['#2d6a4a', '#c0392b', '#1565c0', '#8e44ad', '#000000']
 
-function CatatanTeks({ data, autoFocus, onSimpan, onHapus }) {
+function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode }) {
   const [text, setText] = useState(data.text || '')
   const [editing, setEditing] = useState(autoFocus || !data.text)
-  const [hover, setHover] = useState(false)
   const ref = useRef(null)
 
   useEffect(() => {
@@ -24,15 +23,22 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus }) {
     else onHapus(data.id)
   }
 
+  function handleClick() {
+    if (hapusMode) { onHapus(data.id); return }
+    if (!editing) setEditing(true)
+  }
+
   return (
     <div
       onMouseDown={e => e.stopPropagation()}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onClick={() => !editing && setEditing(true)}
-      style={{ position: 'absolute', left: data.x * 100 + '%', top: data.y * 100 + '%', minWidth: 60 }}
+      onClick={handleClick}
+      style={{
+        position: 'absolute', left: data.x * 100 + '%', top: data.y * 100 + '%', minWidth: 60,
+        outline: hapusMode ? '2px dashed #c0392b' : 'none', outlineOffset: 3, borderRadius: 4,
+        cursor: hapusMode ? 'pointer' : 'default',
+      }}
     >
-      {editing ? (
+      {editing && !hapusMode ? (
         <textarea
           ref={ref}
           value={text}
@@ -50,54 +56,31 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus }) {
       ) : (
         <div
           style={{
-            fontSize: 15, fontWeight: 600, color: data.color || '#2d6a4a', cursor: 'text',
+            fontSize: 15, fontWeight: 600, color: data.color || '#2d6a4a', cursor: hapusMode ? 'pointer' : 'text',
             whiteSpace: 'pre-wrap', fontFamily: "'Noto Serif JP', serif", padding: '2px 4px',
           }}
         >
           {data.text}
         </div>
       )}
-      {hover && (
-        <button
-          onClick={() => onHapus(data.id)}
-          title="Hapus catatan"
-          style={{
-            position: 'absolute', top: -8, right: -8, width: 18, height: 18, borderRadius: '50%',
-            background: '#c0392b', color: '#fff', border: 'none', fontSize: 11, lineHeight: '18px',
-            cursor: 'pointer', padding: 0,
-          }}
-        >×</button>
-      )}
     </div>
   )
 }
 
-function HighlightBox({ data, onHapus }) {
-  const [hover, setHover] = useState(false)
+function HighlightBox({ data, onHapus, hapusMode }) {
   return (
     <div
       onMouseDown={e => e.stopPropagation()}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onClick={() => { if (hapusMode) onHapus(data.id) }}
       style={{
         position: 'absolute',
         left: data.x * 100 + '%', top: data.y * 100 + '%',
         width: data.width * 100 + '%', height: data.height * 100 + '%',
         background: data.color, opacity: 0.4, mixBlendMode: 'multiply',
+        outline: hapusMode ? '2px dashed #c0392b' : 'none', outlineOffset: 2,
+        cursor: hapusMode ? 'pointer' : 'default',
       }}
-    >
-      {hover && (
-        <button
-          onClick={() => onHapus(data.id)}
-          title="Hapus highlight"
-          style={{
-            position: 'absolute', top: -9, right: -9, width: 18, height: 18, borderRadius: '50%',
-            background: '#c0392b', color: '#fff', border: 'none', fontSize: 11, lineHeight: '18px',
-            cursor: 'pointer', padding: 0, mixBlendMode: 'normal', opacity: 1,
-          }}
-        >×</button>
-      )}
-    </div>
+    />
   )
 }
 
@@ -117,6 +100,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [warnaTeks, setWarnaTeks] = useState(WARNA_TEKS[0])
   const [drawing, setDrawing] = useState(null)
   const [editingTeksId, setEditingTeksId] = useState(null)
+  const [showKonfirmasiHapus, setShowKonfirmasiHapus] = useState(false)
 
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -156,8 +140,16 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
       const canvas = canvasRef.current
       if (!canvas) return
       const ctx = canvas.getContext('2d')
-      canvas.width = viewport.width
-      canvas.height = viewport.height
+
+      // render di resolusi native layar (HiDPI/retina) biar nggak burem,
+      // tapi ukuran tampilan (CSS) tetap sesuai viewport
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = Math.floor(viewport.width * dpr)
+      canvas.height = Math.floor(viewport.height * dpr)
+      canvas.style.width = `${viewport.width}px`
+      canvas.style.height = `${viewport.height}px`
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
       await page.render({ canvasContext: ctx, viewport }).promise
       if (!batal) setCanvasSize({ width: viewport.width, height: viewport.height })
     }
@@ -257,17 +249,29 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
           className="icon-btn"
           onClick={() => setMode(m => (m === 'highlight' ? null : 'highlight'))}
           title="Highlight"
-          style={{ background: mode === 'highlight' ? '#fff' : 'transparent', color: mode === 'highlight' ? '#2d6a4a' : '#fff' }}
+          style={{ background: mode === 'highlight' ? '#2d6a4a' : '#fff', color: mode === 'highlight' ? '#2d6a4a' : '#fff', border: '1.5px solid #2d6a4a' }}
         >🖍️</button>
         <button
           className="icon-btn"
           onClick={() => setMode(m => (m === 'text' ? null : 'text'))}
           title="Catatan teks"
           style={{
-            background: mode === 'text' ? '#fff' : 'transparent', color: mode === 'text' ? '#2d6a4a' : '#fff',
-            fontWeight: 700, fontStyle: 'italic', fontFamily: 'Georgia, serif', fontSize: 15,
+            background: mode === 'text' ? '#2d6a4a' : '#fff',
+            color: mode === 'text' ? '#fff' : '#2d6a4a',
+            border: '1.5px solid #2d6a4a',
+            fontWeight: 700, fontStyle: 'italic', fontFamily: 'Georgia, serif', fontSize: 13,
           }}
-        >Aa</button>
+        >abc</button>
+        <button
+          className="icon-btn"
+          onClick={() => setMode(m => (m === 'hapus' ? null : 'hapus'))}
+          title="Mode hapus anotasi"
+          style={{
+            background: mode === 'hapus' ? '#c0392b' : '#fff',
+            color: mode === 'hapus' ? '#fff' : '#c0392b',
+            border: '1.5px solid #c0392b',
+          }}
+        >🗑️</button>
 
         {mode === 'highlight' && WARNA_HIGHLIGHT.map(w => (
           <button
@@ -294,7 +298,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
 
         <div style={{ flex: 1 }} />
         {onHapusPdf && (
-          <button className="icon-btn danger" onClick={onHapusPdf} title="Hapus PDF">🗑️</button>
+          <button className="icon-btn danger" onClick={() => setShowKonfirmasiHapus(true)} title="Hapus PDF">🗑️</button>
         )}
         <button className="icon-btn" onClick={onClose}>✕</button>
       </div>
@@ -323,7 +327,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
               }}
             >
               {highlightHalIni.map(h => (
-                <HighlightBox key={h.id} data={h} onHapus={hapusAnotasi} />
+                <HighlightBox key={h.id} data={h} onHapus={hapusAnotasi} hapusMode={mode === 'hapus'} />
               ))}
 
               {teksHalIni.map(t => (
@@ -333,6 +337,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                   autoFocus={t.id === editingTeksId}
                   onSimpan={simpanTeks}
                   onHapus={hapusAnotasi}
+                  hapusMode={mode === 'hapus'}
                 />
               ))}
 
@@ -349,6 +354,48 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
           </div>
         )}
       </div>
+
+      {showKonfirmasiHapus && (
+        <div
+          onClick={() => setShowKonfirmasiHapus(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 10, padding: '22px 24px', width: '90%', maxWidth: 340,
+              boxShadow: '0 10px 30px rgba(0,0,0,.25)', textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 30, marginBottom: 8 }}>🗑️</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: '#1f2d24', marginBottom: 6 }}>
+              Hapus PDF ini?
+            </div>
+            <div style={{ fontSize: 13, color: '#5b6b60', marginBottom: 18, lineHeight: 1.5 }}>
+              Semua highlight dan catatan di PDF ini juga akan ikut terhapus. Tindakan ini tidak bisa dibatalkan.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowKonfirmasiHapus(false)}
+                style={{
+                  padding: '8px 18px', borderRadius: 6, border: '1px solid #d6ded9',
+                  background: '#fff', color: '#3a4a40', fontSize: 13, cursor: 'pointer',
+                }}
+              >Batal</button>
+              <button
+                onClick={() => { setShowKonfirmasiHapus(false); onHapusPdf() }}
+                style={{
+                  padding: '8px 18px', borderRadius: 6, border: 'none',
+                  background: '#c0392b', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}
+              >Ya, Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
