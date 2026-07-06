@@ -457,8 +457,13 @@ export default function DiaryHalaman({ paketId, onClose }) {
               className="icon-btn"
               onClick={() => setRevealedIds(new Set(highlightList.map(h => h.id)))}
               title="Buka semua jawaban"
-              style={{ background: '#fff', border: '1.5px solid #2d6a4a', color: '#2d6a4a', fontSize: 11, padding: '0 8px' }}
-            >Buka semua</button>
+              style={{ background: '#fff', border: '1.5px solid #2d6a4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#2d6a4a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9l6 5 6-5" />
+                <path d="M6 15l6 5 6-5" />
+              </svg>
+            </button>
           )}
 
           {terkunci && !modeUji && (
