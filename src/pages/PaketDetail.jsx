@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import PdfHighlighter from './PdfHighlighter'
 
 function normalisasiJP(s) {
   return String(s).trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
@@ -502,29 +503,33 @@ export default function PaketDetail({ paketId, goTo }) {
         </div>
       </div>
 
-      {showPdf && (
-        <div className="pdf-panel">
-          <div className="pdf-panel-header">
-            <div style={{ flex: 1, fontWeight: 700, color: '#2d6a4a', fontSize: 13 }}>📄 {paket.nama}</div>
-            {paket.pdf_path && <button className="icon-btn danger" onClick={hapusPdf} title="Hapus PDF">🗑️</button>}
-            <button className="icon-btn" onClick={() => setShowPdf(false)}>✕</button>
-          </div>
-          <div className="pdf-panel-body">
-            {paket.pdf_path && pdfUrl ? (
-              <iframe src={pdfUrl} style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }} />
-            ) : (
-              <div style={{ textAlign: 'center', color: '#cde8d0', padding: 30 }}>
-                <div style={{ fontSize: 40, marginBottom: 14 }}>📎</div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Belum ada PDF di paket ini</div>
-                <label style={{ display: 'inline-block', cursor: 'pointer', padding: '10px 20px', borderRadius: 10, background: '#2d6a4a', color: '#fff', fontSize: 13, fontWeight: 600 }}>
-                  {uploading ? 'Uploading...' : '＋ Upload PDF'}
-                  <input type="file" accept="application/pdf" onChange={uploadPdf} style={{ display: 'none' }} disabled={uploading} />
-                </label>
-              </div>
-            )}
-          </div>
+{showPdf && (
+  paket.pdf_path && pdfUrl ? (
+    <PdfHighlighter
+      paketId={paketId}
+      pdfPath={paket.pdf_path}
+      pdfUrl={pdfUrl}
+      onClose={() => setShowPdf(false)}
+    />
+  ) : (
+    <div className="pdf-panel">
+      <div className="pdf-panel-header">
+        <div style={{ flex: 1, fontWeight: 700, color: '#2d6a4a', fontSize: 13 }}>📄 {paket.nama}</div>
+        <button className="icon-btn" onClick={() => setShowPdf(false)}>✕</button>
+      </div>
+      <div className="pdf-panel-body">
+        <div style={{ textAlign: 'center', color: '#cde8d0', padding: 30 }}>
+          <div style={{ fontSize: 40, marginBottom: 14 }}>📎</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Belum ada PDF di paket ini</div>
+          <label style={{ display: 'inline-block', cursor: 'pointer', padding: '10px 20px', borderRadius: 10, background: '#2d6a4a', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+            {uploading ? 'Uploading...' : '＋ Upload PDF'}
+            <input type="file" accept="application/pdf" onChange={uploadPdf} style={{ display: 'none' }} disabled={uploading} />
+          </label>
         </div>
-      )}
+      </div>
+    </div>
+  )
+)}
 
       {tes && (
         <div className="modal-overlay open">
