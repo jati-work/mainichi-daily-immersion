@@ -4,6 +4,12 @@ import { supabase } from '../supabaseClient'
 const WARNA_HIGHLIGHT = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
 const WARNA_TEKS = ['#2d6a4a', '#c0392b', '#1565c0', '#8e44ad', '#000000']
 
+// Ukuran "kertas" FIXED (px) — sengaja gak pakai flex:1/height:100% biar
+// posisi highlight & catatan (disimpan sbg % dari rect ini) selalu konsisten
+// di semua device/browser, gak peduli tinggi address bar/tab bar beda-beda.
+const PAPER_WIDTH = 820
+const PAPER_HEIGHT = 1160
+
 function IconTrash({ color = '#c0392b', size = 16 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -485,9 +491,9 @@ export default function DiaryHalaman({ paketId, onClose }) {
         {loading ? (
           <div style={{ color: '#cde8d0', padding: 30 }}>Memuat diary...</div>
         ) : terkunci ? (
-          <div style={{ width: 820, margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ width: PAPER_WIDTH, margin: '0 auto' }}>
             <div style={{
-              position: 'relative', flex: 1, background: '#fff', padding: '36px 44px', fontSize: 17,
+              position: 'relative', width: PAPER_WIDTH, height: PAPER_HEIGHT, background: '#fff', padding: '36px 44px', fontSize: 17,
               lineHeight: 1.9, color: '#1f2d24', fontFamily: "'Noto Serif JP', serif", whiteSpace: 'pre-wrap',
               boxShadow: '0 0 0 1px rgba(0,0,0,.05)', borderRadius: 4, boxSizing: 'border-box', textAlign: 'left',
             }}>
@@ -535,7 +541,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
             onChange={e => handleChangeTeks(e.target.value)}
             placeholder="Tulis apa saja di sini..."
             style={{
-              width: 820, minHeight: '100%', resize: 'none', border: 'none', outline: 'none',
+              width: PAPER_WIDTH, minHeight: PAPER_HEIGHT, resize: 'none', border: 'none', outline: 'none',
               background: '#fff', padding: '36px 44px', fontSize: 17, lineHeight: 1.9, color: '#1f2d24',
               fontFamily: "'Noto Serif JP', serif", boxShadow: '0 0 0 1px rgba(0,0,0,.05)', borderRadius: 4,
             }}
