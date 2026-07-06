@@ -237,9 +237,18 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   return (
     <div className="pdf-panel">
       <div className="pdf-panel-header" style={{ gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button className="icon-btn" onClick={() => gantiHalaman(-1)} disabled={pageNum <= 1}>‹</button>
-          <div style={{ fontSize: 12, color: '#fff', minWidth: 44, textAlign: 'center' }}>{pageNum} / {numPages}</div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: '3px 10px 3px 3px',
+          }}>
+            <span style={{
+              background: '#1a1a1a', color: '#fff', fontSize: 12, fontWeight: 600,
+              borderRadius: 12, padding: '3px 10px', minWidth: 16, textAlign: 'center',
+            }}>{pageNum}</span>
+            <span style={{ fontSize: 12, color: '#fff', opacity: 0.85 }}>/ {numPages}</span>
+          </div>
           <button className="icon-btn" onClick={() => gantiHalaman(1)} disabled={pageNum >= numPages}>›</button>
         </div>
 
