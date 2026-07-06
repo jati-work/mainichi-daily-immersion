@@ -73,7 +73,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
       setLoading(true)
       setErrorMsg(null)
       try {
-        const doc = await pdfjsLib.getDocument(pdfUrl).promise
+        const doc = await pdfjsLib.getDocument({ url: pdfUrl }).promise
         if (batal) return
         setPdfDoc(doc)
         setNumPages(doc.numPages)
