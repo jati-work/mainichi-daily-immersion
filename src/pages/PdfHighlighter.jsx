@@ -5,49 +5,103 @@ import { supabase } from '../supabaseClient'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
-const WARNA_LIST = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
+const WARNA_HIGHLIGHT = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
+const WARNA_TEKS = ['#2d6a4a', '#c0392b', '#1565c0', '#8e44ad', '#000000']
 
 function CatatanTeks({ data, autoFocus, onSimpan, onHapus }) {
   const [text, setText] = useState(data.text || '')
+  const [editing, setEditing] = useState(autoFocus || !data.text)
+  const [hover, setHover] = useState(false)
   const ref = useRef(null)
 
   useEffect(() => {
-    if (autoFocus) ref.current?.focus()
-  }, [autoFocus])
+    if (editing) ref.current?.focus()
+  }, [editing])
+
+  function selesai() {
+    setEditing(false)
+    if (text.trim()) onSimpan(data.id, text)
+    else onHapus(data.id)
+  }
 
   return (
     <div
       onMouseDown={e => e.stopPropagation()}
-      style={{ position: 'absolute', left: data.x * 100 + '%', top: data.y * 100 + '%', minWidth: 120 }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={() => !editing && setEditing(true)}
+      style={{ position: 'absolute', left: data.x * 100 + '%', top: data.y * 100 + '%', minWidth: 60 }}
     >
-      <textarea
-        ref={ref}
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onBlur={() => (text.trim() ? onSimpan(data.id, text) : onHapus(data.id))}
-        rows={Math.max(1, text.split('\n').length)}
-        placeholder="Tulis catatan..."
-        style={{
-          display: 'block', resize: 'both', minWidth: 120, minHeight: 30,
-          fontSize: 13, padding: '5px 7px', border: '1.5px dashed #2d6a4a',
-          borderRadius: 6, background: 'rgba(255,255,255,.95)', color: '#1a3a2a',
-          fontFamily: "'Noto Serif JP', serif",
-        }}
-      />
-      <button
-        onClick={() => onHapus(data.id)}
-        title="Hapus catatan"
-        style={{
-          position: 'absolute', top: -8, right: -8, width: 18, height: 18, borderRadius: '50%',
-          background: '#c0392b', color: '#fff', border: 'none', fontSize: 11, lineHeight: '18px',
-          cursor: 'pointer', padding: 0,
-        }}
-      >×</button>
+      {editing ? (
+        <textarea
+          ref={ref}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onBlur={selesai}
+          rows={Math.max(1, text.split('\n').length)}
+          placeholder="Tulis catatan..."
+          style={{
+            display: 'block', resize: 'both', minWidth: 120, minHeight: 30,
+            fontSize: 15, padding: '5px 7px', border: '1.5px dashed #2d6a4a',
+            borderRadius: 6, background: 'rgba(255,255,255,.95)', color: data.color || '#2d6a4a',
+            fontFamily: "'Noto Serif JP', serif",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            fontSize: 15, fontWeight: 600, color: data.color || '#2d6a4a', cursor: 'text',
+            whiteSpace: 'pre-wrap', fontFamily: "'Noto Serif JP', serif", padding: '2px 4px',
+          }}
+        >
+          {data.text}
+        </div>
+      )}
+      {hover && (
+        <button
+          onClick={() => onHapus(data.id)}
+          title="Hapus catatan"
+          style={{
+            position: 'absolute', top: -8, right: -8, width: 18, height: 18, borderRadius: '50%',
+            background: '#c0392b', color: '#fff', border: 'none', fontSize: 11, lineHeight: '18px',
+            cursor: 'pointer', padding: 0,
+          }}
+        >×</button>
+      )}
     </div>
   )
 }
 
-// paketId, pdfPath, pdfUrl (signed url), onClose: props dari PaketDetail
+function HighlightBox({ data, onHapus }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <div
+      onMouseDown={e => e.stopPropagation()}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: 'absolute',
+        left: data.x * 100 + '%', top: data.y * 100 + '%',
+        width: data.width * 100 + '%', height: data.height * 100 + '%',
+        background: data.color, opacity: 0.4, mixBlendMode: 'multiply',
+      }}
+    >
+      {hover && (
+        <button
+          onClick={() => onHapus(data.id)}
+          title="Hapus highlight"
+          style={{
+            position: 'absolute', top: -9, right: -9, width: 18, height: 18, borderRadius: '50%',
+            background: '#c0392b', color: '#fff', border: 'none', fontSize: 11, lineHeight: '18px',
+            cursor: 'pointer', padding: 0, mixBlendMode: 'normal', opacity: 1,
+          }}
+        >×</button>
+      )}
+    </div>
+  )
+}
+
+// paketId, pdfPath, pdfUrl (signed url), onClose, onHapusPdf: props dari PaketDetail
 export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHapusPdf }) {
   const [pdfDoc, setPdfDoc] = useState(null)
   const [numPages, setNumPages] = useState(0)
@@ -59,7 +113,8 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
 
   const [anotasi, setAnotasi] = useState([])
   const [mode, setMode] = useState(null) // null | 'highlight' | 'text'
-  const [warna, setWarna] = useState(WARNA_LIST[0])
+  const [warnaHighlight, setWarnaHighlight] = useState(WARNA_HIGHLIGHT[0])
+  const [warnaTeks, setWarnaTeks] = useState(WARNA_TEKS[0])
   const [drawing, setDrawing] = useState(null)
   const [editingTeksId, setEditingTeksId] = useState(null)
 
@@ -160,7 +215,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     const { x, y, width, height } = drawing
     setDrawing(null)
     if (width < 0.004 || height < 0.004) return
-    const baru = { paket_id: paketId, pdf_path: pdfPath, page: pageNum, x, y, width, height, color: warna, type: 'highlight' }
+    const baru = { paket_id: paketId, pdf_path: pdfPath, page: pageNum, x, y, width, height, color: warnaHighlight, type: 'highlight' }
     const { data, error } = await supabase.from('pdf_highlights').insert(baru).select().single()
     if (error) { alert('Gagal simpan highlight: ' + error.message); return }
     setAnotasi(a => [...a, data])
@@ -168,7 +223,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
 
   // ----- mode teks: klik buat kotak catatan baru -----
   async function tambahTeks(x, y) {
-    const baru = { paket_id: paketId, pdf_path: pdfPath, page: pageNum, x, y, width: 0.25, height: 0, color: warna, type: 'text', text: '' }
+    const baru = { paket_id: paketId, pdf_path: pdfPath, page: pageNum, x, y, width: 0.25, height: 0, color: warnaTeks, type: 'text', text: '' }
     const { data, error } = await supabase.from('pdf_highlights').insert(baru).select().single()
     if (error) { alert('Gagal bikin catatan: ' + error.message); return }
     setAnotasi(a => [...a, data])
@@ -208,17 +263,31 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
           className="icon-btn"
           onClick={() => setMode(m => (m === 'text' ? null : 'text'))}
           title="Catatan teks"
-          style={{ background: mode === 'text' ? '#fff' : 'transparent', color: mode === 'text' ? '#2d6a4a' : '#fff' }}
-        >📝</button>
+          style={{
+            background: mode === 'text' ? '#fff' : 'transparent', color: mode === 'text' ? '#2d6a4a' : '#fff',
+            fontWeight: 700, fontStyle: 'italic', fontFamily: 'Georgia, serif', fontSize: 15,
+          }}
+        >Aa</button>
 
-        {mode === 'highlight' && WARNA_LIST.map(w => (
+        {mode === 'highlight' && WARNA_HIGHLIGHT.map(w => (
           <button
             key={w}
-            onClick={() => setWarna(w)}
+            onClick={() => setWarnaHighlight(w)}
             title={w}
             style={{
               width: 20, height: 20, borderRadius: '50%', background: w, cursor: 'pointer',
-              border: warna === w ? '2px solid #fff' : '1px solid rgba(255,255,255,.5)',
+              border: warnaHighlight === w ? '2px solid #fff' : '1px solid rgba(255,255,255,.5)',
+            }}
+          />
+        ))}
+        {mode === 'text' && WARNA_TEKS.map(w => (
+          <button
+            key={w}
+            onClick={() => setWarnaTeks(w)}
+            title={w}
+            style={{
+              width: 20, height: 20, borderRadius: '50%', background: w, cursor: 'pointer',
+              border: warnaTeks === w ? '2px solid #fff' : '1px solid rgba(255,255,255,.5)',
             }}
           />
         ))}
@@ -254,19 +323,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
               }}
             >
               {highlightHalIni.map(h => (
-                <div
-                  key={h.id}
-                  onMouseDown={e => e.stopPropagation()}
-                  onDoubleClick={() => hapusAnotasi(h.id)}
-                  title="Klik dua kali untuk hapus"
-                  style={{
-                    position: 'absolute',
-                    left: h.x * 100 + '%', top: h.y * 100 + '%',
-                    width: h.width * 100 + '%', height: h.height * 100 + '%',
-                    background: h.color, opacity: 0.4, mixBlendMode: 'multiply',
-                    cursor: 'pointer',
-                  }}
-                />
+                <HighlightBox key={h.id} data={h} onHapus={hapusAnotasi} />
               ))}
 
               {teksHalIni.map(t => (
@@ -284,7 +341,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                   position: 'absolute',
                   left: drawing.x * 100 + '%', top: drawing.y * 100 + '%',
                   width: drawing.width * 100 + '%', height: drawing.height * 100 + '%',
-                  background: warna, opacity: 0.4, mixBlendMode: 'multiply',
+                  background: warnaHighlight, opacity: 0.4, mixBlendMode: 'multiply',
                   pointerEvents: 'none',
                 }} />
               )}
