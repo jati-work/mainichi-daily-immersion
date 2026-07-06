@@ -54,6 +54,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [pageNum, setPageNum] = useState(1)
   const [scale, setScale] = useState(1.2)
   const [loading, setLoading] = useState(true)
+  const [errorMsg, setErrorMsg] = useState(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
 
   const [anotasi, setAnotasi] = useState([])
@@ -70,12 +71,21 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     let batal = false
     async function muat() {
       setLoading(true)
-      const doc = await pdfjsLib.getDocument(pdfUrl).promise
-      if (batal) return
-      setPdfDoc(doc)
-      setNumPages(doc.numPages)
-      setPageNum(1)
-      setLoading(false)
+      setErrorMsg(null)
+      try {
+        const doc = await pdfjsLib.getDocument(pdfUrl).promise
+        if (batal) return
+        setPdfDoc(doc)
+        setNumPages(doc.numPages)
+        setPageNum(1)
+        setLoading(false)
+      } catch (err) {
+        console.error('Gagal memuat PDF:', err)
+        if (!batal) {
+          setErrorMsg(err?.message || 'Gagal memuat PDF, cek console untuk detail.')
+          setLoading(false)
+        }
+      }
     }
     muat()
     return () => { batal = true }
@@ -223,6 +233,12 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
       <div className="pdf-panel-body" style={{ overflow: 'auto', display: 'flex', justifyContent: 'center' }}>
         {loading ? (
           <div style={{ color: '#cde8d0', padding: 30 }}>Memuat PDF...</div>
+        ) : errorMsg ? (
+          <div style={{ color: '#f8b4a8', padding: 30, textAlign: 'center', maxWidth: 420 }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>⚠️</div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>PDF gagal dimuat</div>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>{errorMsg}</div>
+          </div>
         ) : (
           <div style={{ position: 'relative', width: canvasSize.width, height: canvasSize.height }}>
             <canvas ref={canvasRef} />
