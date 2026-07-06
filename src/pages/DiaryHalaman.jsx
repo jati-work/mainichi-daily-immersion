@@ -131,18 +131,28 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah }
   )
 }
 
-function HighlightBox({ data, onHapus, hapusMode }) {
+function HighlightBox({ data, onHapus, hapusMode, modeUji, revealed, onToggleReveal }) {
+  // Mode uji ("aka shiito"): highlight jadi solid nutup teks di baliknya sampai di-tap.
+  // Highlight lain yg gak kena tap, atau teks yg gak di-highlight sama sekali, gak kepengaruh.
+  const tertutup = modeUji && !revealed
   return (
     <div
       onMouseDown={e => e.stopPropagation()}
-      onClick={() => { if (hapusMode) onHapus(data.id) }}
+      onClick={() => {
+        if (hapusMode) { onHapus(data.id); return }
+        if (modeUji) { onToggleReveal(data.id); return }
+      }}
+      title={modeUji ? (tertutup ? 'Tap untuk buka jawaban' : 'Tap untuk tutup lagi') : undefined}
       style={{
         position: 'absolute',
         left: data.x * 100 + '%', top: data.y * 100 + '%',
         width: data.width * 100 + '%', height: data.height * 100 + '%',
-        background: data.color, opacity: 0.4, mixBlendMode: 'multiply',
+        background: data.color,
+        opacity: tertutup ? 1 : 0.4,
+        mixBlendMode: tertutup ? 'normal' : 'multiply',
         outline: hapusMode ? '2px dashed #c0392b' : 'none', outlineOffset: 2,
-        cursor: hapusMode ? 'pointer' : 'default',
+        cursor: hapusMode || modeUji ? 'pointer' : 'default',
+        transition: 'opacity .15s ease',
       }}
     />
   )
@@ -160,6 +170,8 @@ export default function DiaryHalaman({ paketId, onClose }) {
 
   const [anotasi, setAnotasi] = useState([])
   const [mode, setMode] = useState(null) // null | 'highlight' | 'text' | 'hapus'
+  const [modeUji, setModeUji] = useState(false) // mode "aka shiito": highlight ditutup solid buat uji hafalan
+  const [revealedIds, setRevealedIds] = useState(() => new Set()) // highlight yg lagi "dibuka" pas mode uji
   const [warnaHighlight, setWarnaHighlight] = useState(WARNA_HIGHLIGHT[0])
   const [warnaTeks, setWarnaTeks] = useState(WARNA_TEKS[0])
   const [drawing, setDrawing] = useState(null)
@@ -204,9 +216,35 @@ export default function DiaryHalaman({ paketId, onClose }) {
   useEffect(() => {
     setTeks(halamanAktif?.isi_teks || '')
     setMode(null)
+    setModeUji(false)
+    setRevealedIds(new Set())
     if (halamanAktif) muatAnotasi(halamanAktif.id)
     else setAnotasi([])
   }, [indexAktif, halaman.length])
+
+  // ----- mode "aka shiito" (uji hafalan) -----
+  function pilihMode(m) {
+    setModeUji(false) // edit tool & mode uji saling eksklusif
+    setMode(cur => (cur === m ? null : m))
+  }
+
+  function toggleModeUji() {
+    setModeUji(m => {
+      const next = !m
+      if (next) setMode(null) // keluar dari mode edit kalau masuk mode uji
+      setRevealedIds(new Set())
+      return next
+    })
+  }
+
+  function toggleReveal(id) {
+    setRevealedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function muatAnotasi(diaryPageId) {
     const { data } = await supabase
@@ -394,20 +432,46 @@ export default function DiaryHalaman({ paketId, onClose }) {
             style={{ background: '#fff', border: '1.5px solid #2d6a4a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           ><IconPlus color="#2d6a4a" size={16} /></button>
           <span style={{ fontSize: 11, color: '#1a1a1a', opacity: 0.6, minWidth: 80 }}>
-            {terkunci ? 'Terkunci' : (saving ? 'Menyimpan...' : 'Tersimpan')}
+            {modeUji ? `Mode Uji · ${revealedIds.size}/${highlightList.length} dibuka` : terkunci ? 'Terkunci' : (saving ? 'Menyimpan...' : 'Tersimpan')}
           </span>
 
-          {terkunci && (
+          {terkunci && highlightList.length > 0 && (
+            <button
+              className="icon-btn"
+              onClick={toggleModeUji}
+              title="Mode Aka Shiito (uji hafalan): sembunyikan kata yang di-highlight"
+              style={{
+                background: modeUji ? '#c0392b' : '#fff',
+                border: '1.5px solid #c0392b',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="4" width="18" height="16" rx="2" fill={modeUji ? '#fff' : '#c0392b'} fillOpacity={modeUji ? 0.9 : 0.25} stroke={modeUji ? '#fff' : '#c0392b'} strokeWidth="2" />
+              </svg>
+            </button>
+          )}
+
+          {modeUji && revealedIds.size < highlightList.length && (
+            <button
+              className="icon-btn"
+              onClick={() => setRevealedIds(new Set(highlightList.map(h => h.id)))}
+              title="Buka semua jawaban"
+              style={{ background: '#fff', border: '1.5px solid #2d6a4a', color: '#2d6a4a', fontSize: 11, padding: '0 8px' }}
+            >Buka semua</button>
+          )}
+
+          {terkunci && !modeUji && (
             <>
               <button
                 className="icon-btn"
-                onClick={() => setMode(m => (m === 'highlight' ? null : 'highlight'))}
+                onClick={() => pilihMode('highlight')}
                 title="Highlight"
                 style={{ background: mode === 'highlight' ? '#2d6a4a' : '#fff', color: mode === 'highlight' ? '#2d6a4a' : '#fff', border: '1.5px solid #2d6a4a' }}
               >🖍️</button>
               <button
                 className="icon-btn"
-                onClick={() => setMode(m => (m === 'text' ? null : 'text'))}
+                onClick={() => pilihMode('text')}
                 title="Catatan teks"
                 style={{
                   background: mode === 'text' ? '#2d6a4a' : '#fff',
@@ -418,7 +482,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
               >abc</button>
               <button
                 className="icon-btn"
-                onClick={() => setMode(m => (m === 'hapus' ? null : 'hapus'))}
+                onClick={() => pilihMode('hapus')}
                 title="Mode hapus anotasi"
                 style={{
                   background: mode === 'hapus' ? '#c0392b' : '#fff',
@@ -510,7 +574,15 @@ export default function DiaryHalaman({ paketId, onClose }) {
                 }}
               >
                 {highlightList.map(h => (
-                  <HighlightBox key={h.id} data={h} onHapus={hapusAnotasi} hapusMode={mode === 'hapus'} />
+                  <HighlightBox
+                    key={h.id}
+                    data={h}
+                    onHapus={hapusAnotasi}
+                    hapusMode={mode === 'hapus'}
+                    modeUji={modeUji}
+                    revealed={revealedIds.has(h.id)}
+                    onToggleReveal={toggleReveal}
+                  />
                 ))}
                 {teksList.map(t => (
                   <CatatanTeks
