@@ -1,12 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import jsPDF from 'jspdf'
 import { supabase } from '../supabaseClient'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
 const WARNA_HIGHLIGHT = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
 const WARNA_TEKS = ['#2d6a4a', '#c0392b', '#1565c0', '#8e44ad', '#000000']
+
+function IconEraser({ color = '#c0392b', size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.5 13.5 10.8 3.8a2 2 0 0 0-2.8 0L3.8 8a2 2 0 0 0 0 2.8l9.7 9.7" />
+      <path d="M8 20.5H21" />
+      <path d="m6 14 6 6" />
+    </svg>
+  )
+}
+
+function IconDownload({ color = '#2d6a4a', size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  )
+}
 
 function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode }) {
   const [text, setText] = useState(data.text || '')
@@ -101,6 +122,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [drawing, setDrawing] = useState(null)
   const [editingTeksId, setEditingTeksId] = useState(null)
   const [showKonfirmasiHapus, setShowKonfirmasiHapus] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -234,13 +256,72 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     setPageNum(p => Math.min(Math.max(p + delta, 1), numPages))
   }
 
+  // ----- gabungkan render halaman + anotasi jadi PDF baru, lalu unduh -----
+  async function unduhPdf() {
+    if (!pdfDoc || exporting) return
+    setExporting(true)
+    try {
+      const EXPORT_SCALE = 2
+      let doc = null
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdfDoc.getPage(i)
+        const viewport = page.getViewport({ scale: EXPORT_SCALE })
+        const off = document.createElement('canvas')
+        off.width = viewport.width
+        off.height = viewport.height
+        const ctx = off.getContext('2d')
+        await page.render({ canvasContext: ctx, viewport }).promise
+
+        const anotasiHal = anotasi.filter(a => a.page === i)
+
+        anotasiHal.filter(a => a.type !== 'text').forEach(h => {
+          ctx.save()
+          ctx.globalAlpha = 0.4
+          ctx.globalCompositeOperation = 'multiply'
+          ctx.fillStyle = h.color
+          ctx.fillRect(h.x * off.width, h.y * off.height, h.width * off.width, h.height * off.height)
+          ctx.restore()
+        })
+
+        anotasiHal.filter(a => a.type === 'text' && a.text).forEach(t => {
+          ctx.save()
+          ctx.fillStyle = t.color || '#2d6a4a'
+          const fontSize = 13 * EXPORT_SCALE
+          ctx.font = `600 ${fontSize}px "Noto Serif JP", sans-serif`
+          const baseX = t.x * off.width + 4 * EXPORT_SCALE
+          let baseY = t.y * off.height + fontSize
+          String(t.text).split('\n').forEach(line => {
+            ctx.fillText(line, baseX, baseY)
+            baseY += fontSize * 1.3
+          })
+          ctx.restore()
+        })
+
+        const imgData = off.toDataURL('image/jpeg', 0.92)
+        if (!doc) {
+          doc = new jsPDF({ unit: 'px', format: [off.width, off.height], hotfixes: ['px_scaling'] })
+        } else {
+          doc.addPage([off.width, off.height])
+        }
+        doc.addImage(imgData, 'JPEG', 0, 0, off.width, off.height)
+      }
+      const namaFile = (pdfPath?.split('/').pop()?.replace(/\.pdf$/i, '') || 'dokumen') + '-anotasi.pdf'
+      doc.save(namaFile)
+    } catch (err) {
+      console.error('Gagal membuat PDF:', err)
+      alert('Gagal mengunduh PDF: ' + (err?.message || 'terjadi kesalahan'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="pdf-panel">
       <div className="pdf-panel-header" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <button className="icon-btn" onClick={() => setScale(s => Math.max(s - 0.2, 0.6))}>－</button>
-            <div style={{ fontSize: 12, color: '#fff', minWidth: 36, textAlign: 'center' }}>{Math.round(scale * 100)}%</div>
+            <div style={{ fontSize: 12, color: '#1a1a1a', minWidth: 36, textAlign: 'center' }}>{Math.round(scale * 100)}%</div>
             <button className="icon-btn" onClick={() => setScale(s => Math.min(s + 0.2, 3))}>＋</button>
           </div>
 
@@ -267,10 +348,10 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
             title="Mode hapus anotasi"
             style={{
               background: mode === 'hapus' ? '#c0392b' : '#fff',
-              color: mode === 'hapus' ? '#fff' : '#c0392b',
               border: '1.5px solid #c0392b',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
-          >🗑️</button>
+          ><IconEraser color={mode === 'hapus' ? '#fff' : '#c0392b'} size={16} /></button>
 
           {mode === 'highlight' && WARNA_HIGHLIGHT.map(w => (
             <button
@@ -306,7 +387,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
               background: '#1a1a1a', color: '#fff', fontSize: 15, fontWeight: 600,
               borderRadius: 14, padding: '4px 13px', minWidth: 20, textAlign: 'center',
             }}>{pageNum}</span>
-            <span style={{ fontSize: 15, color: '#fff', opacity: 0.85 }}>/ {numPages}</span>
+            <span style={{ fontSize: 15, color: '#1a1a1a', opacity: 0.75 }}>/ {numPages}</span>
           </div>
           <button className="icon-btn" onClick={() => gantiHalaman(1)} disabled={pageNum >= numPages} style={{ width: 34, height: 34, fontSize: 18 }}>›</button>
         </div>
@@ -315,6 +396,15 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
           {onHapusPdf && (
             <button className="icon-btn danger" onClick={() => setShowKonfirmasiHapus(true)} title="Hapus PDF">🗑️</button>
           )}
+          <button
+            className="icon-btn"
+            onClick={unduhPdf}
+            disabled={exporting || !pdfDoc}
+            title="Unduh PDF dengan highlight & catatan"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: exporting ? 0.6 : 1 }}
+          >
+            {exporting ? <span style={{ fontSize: 11 }}>...</span> : <IconDownload color="#2d6a4a" size={16} />}
+          </button>
           <button className="icon-btn" onClick={onClose}>✕</button>
         </div>
       </div>
