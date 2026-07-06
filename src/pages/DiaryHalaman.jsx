@@ -485,7 +485,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
         {loading ? (
           <div style={{ color: '#cde8d0', padding: 30 }}>Memuat diary...</div>
         ) : terkunci ? (
-          <div style={{ width: '100%', maxWidth: 820, margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ width: 820, margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div style={{
               position: 'relative', flex: 1, background: '#fff', padding: '36px 44px', fontSize: 17,
               lineHeight: 1.9, color: '#1f2d24', fontFamily: "'Noto Serif JP', serif", whiteSpace: 'pre-wrap',
@@ -535,7 +535,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
             onChange={e => handleChangeTeks(e.target.value)}
             placeholder="Tulis apa saja di sini..."
             style={{
-              width: '100%', maxWidth: 820, minHeight: '100%', resize: 'none', border: 'none', outline: 'none',
+              width: 820, minHeight: '100%', resize: 'none', border: 'none', outline: 'none',
               background: '#fff', padding: '36px 44px', fontSize: 17, lineHeight: 1.9, color: '#1f2d24',
               fontFamily: "'Noto Serif JP', serif", boxShadow: '0 0 0 1px rgba(0,0,0,.05)', borderRadius: 4,
             }}
