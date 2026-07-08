@@ -95,7 +95,7 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah, 
             userSelect: 'none', background: 'rgba(255,255,255,.9)', borderRadius: '50%',
             border: '1px solid rgba(45,106,74,.4)',
           }}
-        >A</div>
+        >⤡</div>
       )}
       {editing && !hapusMode ? (
         <textarea
