@@ -91,7 +91,7 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah, 
           style={{
             position: 'absolute', right: -8, bottom: -8, width: 16, height: 16,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'ns-resize', color: '#2d6a4a', fontSize: 11, lineHeight: 1,
+            cursor: 'nwse-resize', color: '#2d6a4a', fontSize: 11, lineHeight: 1,
             userSelect: 'none', background: 'rgba(255,255,255,.9)', borderRadius: '50%',
             border: '1px solid rgba(45,106,74,.4)',
           }}
