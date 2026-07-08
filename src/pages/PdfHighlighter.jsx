@@ -29,10 +29,11 @@ function IconDownload({ color = '#2d6a4a', size = 16 }) {
   )
 }
 
-function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah }) {
+function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah, onResizeFont }) {
   const [text, setText] = useState(data.text || '')
   const [editing, setEditing] = useState(autoFocus || !data.text)
   const ref = useRef(null)
+  const fontSize = data.font_size || 13
 
   useEffect(() => {
     if (editing) ref.current?.focus()
@@ -52,6 +53,11 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah }
   function handleDragMouseDown(e) {
     e.stopPropagation()
     onPindah(data.id, e)
+  }
+
+  function handleResizeMouseDown(e) {
+    e.stopPropagation()
+    onResizeFont(data.id, e)
   }
 
   return (
@@ -78,6 +84,19 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah }
           }}
         >⠿</div>
       )}
+      {editing && !hapusMode && (
+        <div
+          onMouseDown={handleResizeMouseDown}
+          title="Tarik untuk ubah ukuran huruf"
+          style={{
+            position: 'absolute', right: -8, bottom: -8, width: 16, height: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'ns-resize', color: '#2d6a4a', fontSize: 11, lineHeight: 1,
+            userSelect: 'none', background: 'rgba(255,255,255,.9)', borderRadius: '50%',
+            border: '1px solid rgba(45,106,74,.4)',
+          }}
+        >A</div>
+      )}
       {editing && !hapusMode ? (
         <textarea
           ref={ref}
@@ -88,7 +107,7 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah }
           placeholder="Tulis catatan..."
           style={{
             display: 'block', resize: 'both', minWidth: 120, minHeight: 30,
-            fontSize: 13, padding: '5px 7px', border: '1.5px dashed #2d6a4a',
+            fontSize, padding: '5px 7px', border: '1.5px dashed #2d6a4a',
             borderRadius: 6, background: 'rgba(255,255,255,.95)', color: data.color || '#2d6a4a',
             fontFamily: "'Noto Serif JP', serif", fontWeight: 400,
           }}
@@ -96,7 +115,7 @@ function CatatanTeks({ data, autoFocus, onSimpan, onHapus, hapusMode, onPindah }
       ) : (
         <div
           style={{
-            fontSize: 13, fontWeight: 400, color: data.color || '#2d6a4a', cursor: hapusMode ? 'pointer' : 'text',
+            fontSize, fontWeight: 400, color: data.color || '#2d6a4a', cursor: hapusMode ? 'pointer' : 'text',
             whiteSpace: 'pre-wrap', fontFamily: "'Noto Serif JP', serif", padding: '2px 4px',
           }}
         >
@@ -156,6 +175,8 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [exporting, setExporting] = useState(false)
   const [draggingId, setDraggingId] = useState(null)
   const [dragOffset, setDragOffset] = useState({ dx: 0, dy: 0 })
+  const [resizingFontId, setResizingFontId] = useState(null)
+  const [resizeFontStart, setResizeFontStart] = useState({ y: 0, fontSize: 13 })
 
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
@@ -284,6 +305,24 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     }
   }
 
+  // ----- geser (drag) buat ubah ukuran huruf catatan teks -----
+  function mulaiResizeFont(id, e) {
+    const item = anotasi.find(a => a.id === id)
+    if (!item) return
+    setResizeFontStart({ y: e.clientY, fontSize: item.font_size || 13 })
+    setResizingFontId(id)
+  }
+
+  async function selesaiResizeFont() {
+    if (!resizingFontId) return
+    const id = resizingFontId
+    const item = anotasi.find(a => a.id === id)
+    setResizingFontId(null)
+    if (item) {
+      await supabase.from('pdf_highlights').update({ font_size: item.font_size || 13 }).eq('id', id)
+    }
+  }
+
   // ----- mode highlight: drag kotak -----
   function handleOverlayMouseDown(e) {
     if (mode === 'highlight') {
@@ -295,6 +334,12 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     }
   }
   function handleOverlayMouseMove(e) {
+    if (resizingFontId) {
+      const dy = e.clientY - resizeFontStart.y
+      const newSize = Math.min(Math.max(Math.round(resizeFontStart.fontSize + dy * 0.15), 9), 40)
+      setAnotasi(a => a.map(item => (item.id === resizingFontId ? { ...item, font_size: newSize } : item)))
+      return
+    }
     if (draggingId) {
       const pos = posisiRelatif(e)
       const nx = Math.min(Math.max(pos.x - dragOffset.dx, 0), 1)
@@ -313,6 +358,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     }))
   }
   async function handleOverlayMouseUp() {
+    if (resizingFontId) { await selesaiResizeFont(); return }
     if (draggingId) { await selesaiDrag(); return }
     if (!drawing) return
     const { x, y, width, height } = drawing
@@ -375,7 +421,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
         anotasiHal.filter(a => a.type === 'text' && a.text).forEach(t => {
           ctx.save()
           ctx.fillStyle = t.color || '#2d6a4a'
-          const fontSize = 13 * EXPORT_SCALE
+          const fontSize = (t.font_size || 13) * EXPORT_SCALE
           ctx.font = `600 ${fontSize}px "Noto Serif JP", sans-serif`
           const baseX = t.x * off.width + 4 * EXPORT_SCALE
           let baseY = t.y * off.height + fontSize
@@ -557,7 +603,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
               onMouseDown={handleOverlayMouseDown}
               onMouseMove={handleOverlayMouseMove}
               onMouseUp={handleOverlayMouseUp}
-              onMouseLeave={() => { setDrawing(null); selesaiDrag() }}
+              onMouseLeave={() => { setDrawing(null); selesaiDrag(); selesaiResizeFont() }}
               style={{
                 position: 'absolute', inset: 0,
                 cursor: mode === 'highlight' ? 'crosshair' : mode === 'text' ? 'text' : 'default',
@@ -584,6 +630,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                   onHapus={hapusAnotasi}
                   hapusMode={mode === 'hapus'}
                   onPindah={mulaiDrag}
+                  onResizeFont={mulaiResizeFont}
                 />
               ))}
 
