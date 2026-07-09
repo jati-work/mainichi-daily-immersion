@@ -10,7 +10,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 // (umum dipakai scanner buat kompres halaman hasil scan hitam-putih).
 // Tanpa ini, gambar isi halaman gagal di-decode dan cuma elemen lain
 // (mis. watermark teks) yang kegambar -> kayak "isi PDF-nya kosong".
-const PDFJS_WASM_URL = new URL('pdfjs-dist/wasm/', import.meta.url).href
+// File-file .wasm ini di-copy ke /wasm/ di root build lewat plugin
+// viteStaticCopy di vite.config.js (source: node_modules/pdfjs-dist/wasm/*).
+const PDFJS_WASM_URL = '/wasm/'
 
 const WARNA_HIGHLIGHT = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
 const WARNA_TEKS = ['#2d6a4a', '#c0392b', '#1565c0', '#8e44ad', '#000000']
