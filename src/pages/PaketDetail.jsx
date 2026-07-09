@@ -553,27 +553,14 @@ async function hapusPdf() {
 
       {tes && (
         <div className="modal-overlay open">
-          <div className="modal-box" style={{ maxWidth: tes.dir === 'natural-dasar' ? 560 : 380, position: 'relative' }}>
+          <div className="modal-box" style={{ maxWidth: tes.dir === 'natural-dasar' ? 560 : 380 }}>
             {tes.dir === 'dasar-bunshuu' && !selesai && (
-              <button
-                onClick={() => setShowRadikalTes(s => !s)}
-                title="Bantuan cari radikal"
-                style={{
-                  position: 'absolute', top: -14, right: -14, width: 32, height: 32, borderRadius: '50%',
-                  border: '2px solid #fff', background: showRadikalTes ? '#1e7d4f' : '#2d6a4a',
-                  color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 2px 8px rgba(0,0,0,.2)', zIndex: 6,
-                }}
-              >
-                部
-              </button>
-            )}
-            {showRadikalTes && (
               <RadicalPicker
-                variant="sidebar"
-                onPilih={(k) => setTes(t => ({ ...t, input: t.input + k }))}
+                variant="panel"
+                open={showRadikalTes}
+                onToggle={() => setShowRadikalTes(s => !s)}
                 onClose={() => setShowRadikalTes(false)}
+                onPilih={(k) => setTes(t => ({ ...t, input: t.input + k }))}
               />
             )}
             {!selesai ? (
