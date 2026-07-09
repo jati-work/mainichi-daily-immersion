@@ -371,7 +371,7 @@ async function hapusPdf() {
       setTes(t => ({ ...t, idx: t.idx + 1, answered: false, input: '', salah: false }))
     }
   }
-  function tutupTes() { setTes(null) }
+  function tutupTes() { setTes(null); setShowRadikalTes(false) }
 
   if (!paket) return <div style={{ padding: 40, textAlign: 'center', color: '#9abaa8' }}>Memuat...</div>
 
@@ -553,7 +553,28 @@ async function hapusPdf() {
 
       {tes && (
         <div className="modal-overlay open">
-          <div className="modal-box" style={{ maxWidth: tes.dir === 'natural-dasar' ? 560 : 380 }}>
+          <div className="modal-box" style={{ maxWidth: tes.dir === 'natural-dasar' ? 560 : 380, position: 'relative' }}>
+            {tes.dir === 'dasar-bunshuu' && !selesai && (
+              <button
+                onClick={() => setShowRadikalTes(s => !s)}
+                title="Bantuan cari radikal"
+                style={{
+                  position: 'absolute', top: 10, left: 10, width: 28, height: 28, borderRadius: '50%',
+                  border: '1.5px solid #b8d8b8', background: showRadikalTes ? '#2d6a4a' : '#f0f7f0',
+                  color: showRadikalTes ? '#fff' : '#2d6a4a', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                部
+              </button>
+            )}
+            {showRadikalTes && (
+              <RadicalPicker
+                variant="sidebar"
+                onPilih={(k) => setTes(t => ({ ...t, input: t.input + k }))}
+                onClose={() => setShowRadikalTes(false)}
+              />
+            )}
             {!selesai ? (
               <>
                 <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{tes.idx + 1} / {tes.words.length} · ✓ {tes.correct} · ✗ {tes.wrong}</div>
@@ -563,29 +584,18 @@ async function hapusPdf() {
                 <div style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, fontWeight: 600, marginBottom: 14, textAlign: 'center' }}>
                   {{ 'arti-dasar': tes.words[tes.idx].arti, 'bunshuu-kanji': tes.words[tes.idx].bunshuu, 'dasar-arti': tes.words[tes.idx].jp, 'dasar-bunshuu': tes.words[tes.idx].jp, 'natural-dasar': tes.words[tes.idx].contoh_kalimat }[tes.dir]}
                 </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
-                  <input
-                    autoFocus value={tes.input} disabled={tes.answered}
-                    onChange={e => setTes(t => ({ ...t, input: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && (tes.answered ? tesLanjut() : tesCek())}
-                    style={{
-                      flex: 1, textAlign: 'center', fontSize: 18,
-                      fontFamily: ['arti-dasar','bunshuu-kanji','natural-dasar'].includes(tes.dir) ? "'Noto Serif JP', serif" : 'inherit',
-                      borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : undefined,
-                      width: tes.dir === 'natural-dasar' ? '100%' : undefined,
-                      boxSizing: tes.dir === 'natural-dasar' ? 'border-box' : undefined,
-                    }}
-                  />
-                  {tes.dir === 'dasar-bunshuu' && !tes.answered && (
-                    <button
-                      onClick={() => setShowRadikalTes(true)}
-                      title="Cari radikal"
-                      style={{ padding: '0 12px', borderRadius: 8, border: '1.5px solid #b8d8b8', background: '#f0f7f0', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2d6a4a' }}
-                    >
-                      部首
-                    </button>
-                  )}
-                </div>
+                <input
+                  autoFocus value={tes.input} disabled={tes.answered}
+                  onChange={e => setTes(t => ({ ...t, input: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && (tes.answered ? tesLanjut() : tesCek())}
+                  style={{
+                    textAlign: 'center', fontSize: 18,
+                    fontFamily: ['arti-dasar','bunshuu-kanji','natural-dasar'].includes(tes.dir) ? "'Noto Serif JP', serif" : 'inherit',
+                    borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : undefined,
+                    width: tes.dir === 'natural-dasar' ? '100%' : undefined,
+                    boxSizing: tes.dir === 'natural-dasar' ? 'border-box' : undefined,
+                  }}
+                />
                 {tes.answered && tes.salah && (
                   <div style={{ textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8 }}>
                     Jawaban: <b>
@@ -615,12 +625,6 @@ async function hapusPdf() {
             )}
           </div>
         </div>
-      )}
-      {showRadikalTes && (
-        <RadicalPicker
-          onPilih={(k) => setTes(t => ({ ...t, input: t.input + k }))}
-          onClose={() => setShowRadikalTes(false)}
-        />
       )}
     </div>
   )
