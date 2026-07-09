@@ -190,6 +190,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
   const panelBodyRef = useRef(null)
+  const progressDebounceRef = useRef(null)
 
   // ----- load dokumen PDF -----
   useEffect(() => {
@@ -202,7 +203,17 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
         if (batal) return
         setPdfDoc(doc)
         setNumPages(doc.numPages)
-        setPageNum(1)
+        // lanjutin dari halaman terakhir yang dibaca (per file), bukan selalu dari halaman 1
+        const { data: progres } = await supabase
+          .from('reading_progress')
+          .select('page_num')
+          .eq('paket_id', paketId)
+          .eq('pdf_path', pdfPath)
+          .maybeSingle()
+        if (batal) return
+        const tersimpan = progres?.page_num
+        const halamanAwal = tersimpan >= 1 && tersimpan <= doc.numPages ? tersimpan : 1
+        setPageNum(halamanAwal)
         setLoading(false)
       } catch (err) {
         console.error('Gagal memuat PDF:', err)
@@ -286,6 +297,24 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   useEffect(() => {
     if (panelBodyRef.current) panelBodyRef.current.scrollTop = 0
   }, [pageNum])
+
+  // simpen halaman terakhir yang dibaca ke Supabase, biar pas dibuka lagi
+  // (dari device manapun) lanjut dari situ. Di-debounce biar nggak spam
+  // request kalau user klik next/prev cepet-cepet.
+  useEffect(() => {
+    if (!pdfDoc || loading) return
+    clearTimeout(progressDebounceRef.current)
+    progressDebounceRef.current = setTimeout(() => {
+      supabase
+        .from('reading_progress')
+        .upsert(
+          { paket_id: paketId, pdf_path: pdfPath, page_num: pageNum, updated_at: new Date().toISOString() },
+          { onConflict: 'paket_id,pdf_path' }
+        )
+        .then(({ error }) => { if (error) console.error('Gagal simpan progres baca:', error) })
+    }, 800)
+    return () => clearTimeout(progressDebounceRef.current)
+  }, [pdfDoc, loading, pageNum, paketId, pdfPath])
 
   function pilihMode(m) {
     setModeUji(false) // edit tool & mode uji saling eksklusif
