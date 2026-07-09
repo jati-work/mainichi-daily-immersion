@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import PdfHighlighter from './PdfHighlighter'
 import DiaryHalaman from './DiaryHalaman'
+import RadicalPicker from './RadicalPicker'
 
 function normalisasiJP(s) {
   return String(s).trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
@@ -68,6 +69,7 @@ export default function PaketDetail({ paketId, goTo }) {
 
   // ----- tes (quiz) -----
   const [tes, setTes] = useState(null)
+  const [showRadikalTes, setShowRadikalTes] = useState(false)
 
   async function muatSemua() {
     const { data: p } = await supabase.from('paket').select('*').eq('id', paketId).single()
@@ -561,18 +563,29 @@ async function hapusPdf() {
                 <div style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, fontWeight: 600, marginBottom: 14, textAlign: 'center' }}>
                   {{ 'arti-dasar': tes.words[tes.idx].arti, 'bunshuu-kanji': tes.words[tes.idx].bunshuu, 'dasar-arti': tes.words[tes.idx].jp, 'dasar-bunshuu': tes.words[tes.idx].jp, 'natural-dasar': tes.words[tes.idx].contoh_kalimat }[tes.dir]}
                 </div>
-                <input
-                  autoFocus value={tes.input} disabled={tes.answered}
-                  onChange={e => setTes(t => ({ ...t, input: e.target.value }))}
-                  onKeyDown={e => e.key === 'Enter' && (tes.answered ? tesLanjut() : tesCek())}
-                  style={{
-                    textAlign: 'center', fontSize: 18,
-                    fontFamily: ['arti-dasar','bunshuu-kanji','natural-dasar'].includes(tes.dir) ? "'Noto Serif JP', serif" : 'inherit',
-                    borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : undefined,
-                    width: tes.dir === 'natural-dasar' ? '100%' : undefined,
-                    boxSizing: tes.dir === 'natural-dasar' ? 'border-box' : undefined,
-                  }}
-                />
+                <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+                  <input
+                    autoFocus value={tes.input} disabled={tes.answered}
+                    onChange={e => setTes(t => ({ ...t, input: e.target.value }))}
+                    onKeyDown={e => e.key === 'Enter' && (tes.answered ? tesLanjut() : tesCek())}
+                    style={{
+                      flex: 1, textAlign: 'center', fontSize: 18,
+                      fontFamily: ['arti-dasar','bunshuu-kanji','natural-dasar'].includes(tes.dir) ? "'Noto Serif JP', serif" : 'inherit',
+                      borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : undefined,
+                      width: tes.dir === 'natural-dasar' ? '100%' : undefined,
+                      boxSizing: tes.dir === 'natural-dasar' ? 'border-box' : undefined,
+                    }}
+                  />
+                  {tes.dir === 'dasar-bunshuu' && !tes.answered && (
+                    <button
+                      onClick={() => setShowRadikalTes(true)}
+                      title="Cari radikal"
+                      style={{ padding: '0 12px', borderRadius: 8, border: '1.5px solid #b8d8b8', background: '#f0f7f0', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#2d6a4a' }}
+                    >
+                      部首
+                    </button>
+                  )}
+                </div>
                 {tes.answered && tes.salah && (
                   <div style={{ textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8 }}>
                     Jawaban: <b>
@@ -602,6 +615,12 @@ async function hapusPdf() {
             )}
           </div>
         </div>
+      )}
+      {showRadikalTes && (
+        <RadicalPicker
+          onPilih={(k) => setTes(t => ({ ...t, input: t.input + k }))}
+          onClose={() => setShowRadikalTes(false)}
+        />
       )}
     </div>
   )
