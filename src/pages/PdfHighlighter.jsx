@@ -259,8 +259,13 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
         ctx.imageSmoothingEnabled = true
         ctx.imageSmoothingQuality = 'high'
 
-        await page.render({ canvasContext: ctx, viewport: renderViewport }).promise
+        // set ukuran wrapper BARENGAN sama canvas (sebelum render mulai),
+        // bukan nunggu render kelar. Kalau nunggu, ada jeda di mana canvas
+        // udah gede tapi wrapper-nya masih ukuran lama/0 -> kertasnya
+        // keliatan "nyamping" dulu sebelum jump ke tengah pas wrapper nyusul.
         if (!batal) setCanvasSize({ width: displayViewport.width, height: displayViewport.height })
+
+        await page.render({ canvasContext: ctx, viewport: renderViewport }).promise
       } catch (err) {
         // Beberapa halaman scan pakai kompresi gambar (JBIG2/OpenJPEG) yang
         // butuh wasm buat di-decode. Kalau gagal, jangan senyap -> tampilkan
