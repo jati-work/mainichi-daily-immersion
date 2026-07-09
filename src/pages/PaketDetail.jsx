@@ -559,10 +559,11 @@ async function hapusPdf() {
                 onClick={() => setShowRadikalTes(s => !s)}
                 title="Bantuan cari radikal"
                 style={{
-                  position: 'absolute', top: 10, left: 10, width: 28, height: 28, borderRadius: '50%',
-                  border: '1.5px solid #b8d8b8', background: showRadikalTes ? '#2d6a4a' : '#f0f7f0',
-                  color: showRadikalTes ? '#fff' : '#2d6a4a', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  position: 'absolute', top: -14, right: -14, width: 32, height: 32, borderRadius: '50%',
+                  border: '2px solid #fff', background: showRadikalTes ? '#1e7d4f' : '#2d6a4a',
+                  color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(0,0,0,.2)', zIndex: 6,
                 }}
               >
                 部
