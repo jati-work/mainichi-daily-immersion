@@ -6,6 +6,12 @@ import { supabase } from '../supabaseClient'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
+// pdf.js v4+ butuh file wasm terpisah buat decode gambar JBIG2/OpenJPEG
+// (umum dipakai scanner buat kompres halaman hasil scan hitam-putih).
+// Tanpa ini, gambar isi halaman gagal di-decode dan cuma elemen lain
+// (mis. watermark teks) yang kegambar -> kayak "isi PDF-nya kosong".
+const PDFJS_WASM_URL = new URL('pdfjs-dist/wasm/', import.meta.url).href
+
 const WARNA_HIGHLIGHT = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
 const WARNA_TEKS = ['#2d6a4a', '#c0392b', '#1565c0', '#8e44ad', '#000000']
 
@@ -188,7 +194,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
       setLoading(true)
       setErrorMsg(null)
       try {
-        const doc = await pdfjsLib.getDocument({ url: pdfUrl }).promise
+        const doc = await pdfjsLib.getDocument({ url: pdfUrl, wasmUrl: PDFJS_WASM_URL }).promise
         if (batal) return
         setPdfDoc(doc)
         setNumPages(doc.numPages)
@@ -211,23 +217,32 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     let batal = false
     async function render() {
       if (!pdfDoc) return
-      const page = await pdfDoc.getPage(pageNum)
-      const viewport = page.getViewport({ scale })
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const ctx = canvas.getContext('2d')
+      try {
+        if (!batal) setErrorMsg(null)
+        const page = await pdfDoc.getPage(pageNum)
+        const viewport = page.getViewport({ scale })
+        const canvas = canvasRef.current
+        if (!canvas) return
+        const ctx = canvas.getContext('2d')
 
-      // render di resolusi native layar (HiDPI/retina) biar nggak burem,
-      // tapi ukuran tampilan (CSS) tetap sesuai viewport
-      const dpr = window.devicePixelRatio || 1
-      canvas.width = Math.floor(viewport.width * dpr)
-      canvas.height = Math.floor(viewport.height * dpr)
-      canvas.style.width = `${viewport.width}px`
-      canvas.style.height = `${viewport.height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        // render di resolusi native layar (HiDPI/retina) biar nggak burem,
+        // tapi ukuran tampilan (CSS) tetap sesuai viewport
+        const dpr = window.devicePixelRatio || 1
+        canvas.width = Math.floor(viewport.width * dpr)
+        canvas.height = Math.floor(viewport.height * dpr)
+        canvas.style.width = `${viewport.width}px`
+        canvas.style.height = `${viewport.height}px`
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-      await page.render({ canvasContext: ctx, viewport }).promise
-      if (!batal) setCanvasSize({ width: viewport.width, height: viewport.height })
+        await page.render({ canvasContext: ctx, viewport }).promise
+        if (!batal) setCanvasSize({ width: viewport.width, height: viewport.height })
+      } catch (err) {
+        // Beberapa halaman scan pakai kompresi gambar (JBIG2/OpenJPEG) yang
+        // butuh wasm buat di-decode. Kalau gagal, jangan senyap -> tampilkan
+        // pesan biar ketauan, daripada halaman keliatan "kosong" tanpa alasan.
+        console.error(`Gagal render halaman ${pageNum}:`, err)
+        if (!batal) setErrorMsg(`Gagal merender halaman ${pageNum}: ${err?.message || 'terjadi kesalahan saat decode gambar.'}`)
+      }
     }
     render()
     return () => { batal = true }
