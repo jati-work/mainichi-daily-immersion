@@ -1,10 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 export default defineConfig({
   plugins: [
     react(),
+    // pdf.js butuh file .wasm (JBIG2/OpenJPEG decoder) yang letaknya di
+    // node_modules/pdfjs-dist/wasm/. Vite nggak otomatis nyalin folder ini
+    // pas build, jadi kita copy manual ke /wasm di output biar ke-deploy
+    // dan bisa diakses lewat wasmUrl: '/wasm/' di kode PdfHighlighter.
+    viteStaticCopy({
+      targets: [
+        { src: 'node_modules/pdfjs-dist/wasm/*', dest: 'wasm' },
+      ],
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
