@@ -181,6 +181,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
 
   const debounceRef = useRef(null)
   const overlayRef = useRef(null)
+  const panelBodyRef = useRef(null)
   const halamanAktif = halaman[indexAktif] || null
   const terkunci = !!halamanAktif?.terkunci
 
@@ -221,6 +222,12 @@ export default function DiaryHalaman({ paketId, onClose }) {
     if (halamanAktif) muatAnotasi(halamanAktif.id)
     else setAnotasi([])
   }, [indexAktif, halaman.length])
+
+  // tiap pindah halaman diary, mulai dari atas lagi (bukan lanjut dari
+  // posisi scroll halaman sebelumnya)
+  useEffect(() => {
+    if (panelBodyRef.current) panelBodyRef.current.scrollTop = 0
+  }, [indexAktif])
 
   // ----- mode "aka shiito" (uji hafalan) -----
   function pilihMode(m) {
@@ -556,7 +563,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
         </div>
       </div>
 
-      <div className="pdf-panel-body" style={{ overflow: 'auto', overflowY: 'scroll', scrollbarGutter: 'stable', display: 'block', textAlign: 'center', padding: 20 }}>
+      <div className="pdf-panel-body" ref={panelBodyRef} style={{ overflow: 'auto', overflowY: 'scroll', scrollbarGutter: 'stable', display: 'block', textAlign: 'center', padding: 20 }}>
         {loading ? (
           <div style={{ color: '#cde8d0', padding: 30 }}>Memuat diary...</div>
         ) : terkunci ? (
