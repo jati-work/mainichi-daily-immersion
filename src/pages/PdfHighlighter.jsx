@@ -231,7 +231,9 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   useEffect(() => {
     let batal = false
     async function render() {
-      if (!pdfDoc) return
+      // canvas belum ke-mount selama loading=true (masih nampilin "Memuat PDF...")
+      // jadi tunggu loading kelar dulu, biar nggak render ke canvas yang belum ada
+      if (!pdfDoc || loading) return
       try {
         if (!batal) setErrorMsg(null)
         const page = await pdfDoc.getPage(pageNum)
@@ -269,7 +271,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     }
     render()
     return () => { batal = true }
-  }, [pdfDoc, pageNum, scale])
+  }, [pdfDoc, pageNum, scale, loading])
 
   // ----- load anotasi (highlight + teks) dari Supabase -----
   async function muatAnotasi() {
