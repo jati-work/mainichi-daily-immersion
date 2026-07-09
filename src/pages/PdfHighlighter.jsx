@@ -188,6 +188,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
 
   const canvasRef = useRef(null)
   const overlayRef = useRef(null)
+  const panelBodyRef = useRef(null)
 
   // ----- load dokumen PDF -----
   useEffect(() => {
@@ -222,22 +223,30 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
       try {
         if (!batal) setErrorMsg(null)
         const page = await pdfDoc.getPage(pageNum)
-        const viewport = page.getViewport({ scale })
         const canvas = canvasRef.current
         if (!canvas) return
         const ctx = canvas.getContext('2d')
 
-        // render di resolusi native layar (HiDPI/retina) biar nggak burem,
-        // tapi ukuran tampilan (CSS) tetap sesuai viewport
+        // Halaman ini biasanya hasil scan (gambar bitonal resolusi tinggi),
+        // jadi teks kecil (kanji dll) gampang burem kalau cuma di-render
+        // sepadat devicePixelRatio layar. Kita render lebih detail dari
+        // ukuran tampilnya (oversampling), lalu biarkan CSS yang nge-scale
+        // ke ukuran display -> hasil downscale jauh lebih tajam daripada
+        // upscale/render pas-pasan.
         const dpr = window.devicePixelRatio || 1
-        canvas.width = Math.floor(viewport.width * dpr)
-        canvas.height = Math.floor(viewport.height * dpr)
-        canvas.style.width = `${viewport.width}px`
-        canvas.style.height = `${viewport.height}px`
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        const OVERSAMPLE = 1.5
+        const displayViewport = page.getViewport({ scale })
+        const renderViewport = page.getViewport({ scale: scale * dpr * OVERSAMPLE })
 
-        await page.render({ canvasContext: ctx, viewport }).promise
-        if (!batal) setCanvasSize({ width: viewport.width, height: viewport.height })
+        canvas.width = Math.floor(renderViewport.width)
+        canvas.height = Math.floor(renderViewport.height)
+        canvas.style.width = `${displayViewport.width}px`
+        canvas.style.height = `${displayViewport.height}px`
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+
+        await page.render({ canvasContext: ctx, viewport: renderViewport }).promise
+        if (!batal) setCanvasSize({ width: displayViewport.width, height: displayViewport.height })
       } catch (err) {
         // Beberapa halaman scan pakai kompresi gambar (JBIG2/OpenJPEG) yang
         // butuh wasm buat di-decode. Kalau gagal, jangan senyap -> tampilkan
@@ -269,6 +278,12 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   useEffect(() => {
     setModeUji(false)
     setRevealedIds(new Set())
+  }, [pageNum])
+
+  // tiap pindah halaman, mulai dari atas lagi (bukan lanjut dari posisi
+  // scroll halaman sebelumnya)
+  useEffect(() => {
+    if (panelBodyRef.current) panelBodyRef.current.scrollTop = 0
   }, [pageNum])
 
   function pilihMode(m) {
@@ -603,7 +618,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
         </div>
       </div>
 
-      <div className="pdf-panel-body" style={{ overflow: 'auto', display: 'block', textAlign: 'center' }}>
+      <div className="pdf-panel-body" ref={panelBodyRef} style={{ overflow: 'auto', display: 'block', textAlign: 'center' }}>
         {loading ? (
           <div style={{ color: '#cde8d0', padding: 30 }}>Memuat PDF...</div>
         ) : errorMsg ? (
