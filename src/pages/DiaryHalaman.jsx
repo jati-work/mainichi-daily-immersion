@@ -182,6 +182,7 @@ export default function DiaryHalaman({ paketId, onClose }) {
   const debounceRef = useRef(null)
   const overlayRef = useRef(null)
   const panelBodyRef = useRef(null)
+  const progressDebounceRef = useRef(null)
   const halamanAktif = halaman[indexAktif] || null
   const terkunci = !!halamanAktif?.terkunci
 
@@ -208,8 +209,16 @@ export default function DiaryHalaman({ paketId, onClose }) {
       if (!err2 && baru) list = [baru]
     }
     setHalaman(list)
-    setIndexAktif(0)
-    setTeks(list[0]?.isi_teks || '')
+    const { data: progres } = await supabase
+      .from('reading_progress')
+      .select('page_num')
+      .eq('paket_id', paketId)
+      .eq('pdf_path', '')
+      .maybeSingle()
+    const tersimpan = progres?.page_num
+    const idxAwal = tersimpan >= 0 && tersimpan < list.length ? tersimpan : 0
+    setIndexAktif(idxAwal)
+    setTeks(list[idxAwal]?.isi_teks || '')
     setLoading(false)
   }
   useEffect(() => { muatHalaman() }, [paketId])
@@ -228,6 +237,24 @@ export default function DiaryHalaman({ paketId, onClose }) {
   useEffect(() => {
     if (panelBodyRef.current) panelBodyRef.current.scrollTop = 0
   }, [indexAktif])
+
+  // simpen halaman diary terakhir yang dibuka ke Supabase, biar pas dibuka
+  // lagi (dari device manapun) lanjut dari situ. Di-debounce biar nggak
+  // spam request kalau user klik next/prev cepet-cepet.
+  useEffect(() => {
+    if (loading || halaman.length === 0) return
+    clearTimeout(progressDebounceRef.current)
+    progressDebounceRef.current = setTimeout(() => {
+      supabase
+        .from('reading_progress')
+        .upsert(
+          { paket_id: paketId, pdf_path: '', page_num: indexAktif, updated_at: new Date().toISOString() },
+          { onConflict: 'paket_id,pdf_path' }
+        )
+        .then(({ error }) => { if (error) console.error('Gagal simpan progres diary:', error) })
+    }, 800)
+    return () => clearTimeout(progressDebounceRef.current)
+  }, [loading, halaman.length, indexAktif, paketId])
 
   // ----- mode "aka shiito" (uji hafalan) -----
   function pilihMode(m) {
