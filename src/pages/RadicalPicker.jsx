@@ -145,7 +145,7 @@ export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', o
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10, padding: 10, background: '#f0f7f0', borderRadius: 8 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <input placeholder="Karakter" value={karakterBaru} onChange={e => setKarakterBaru(e.target.value)}
-              style={{ flex: 1, padding: 8, borderRadius: 6, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", fontSize: 16, boxSizing: 'border-box' }} />
+              style={{ flex: 1, padding: 8, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 13, boxSizing: 'border-box' }} />
             <input placeholder="Goresan" type="number" min="1" value={strokesBaru} onChange={e => setStrokesBaru(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && tambahRadikal()}
               style={{ flex: 1, padding: 8, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 13, boxSizing: 'border-box' }} />
@@ -167,7 +167,7 @@ export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', o
         style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', marginBottom: 10, fontSize: 12, width: '100%', boxSizing: 'border-box' }}
       />
 
-      <div style={{ overflowY: 'auto', flex: 1 }}>
+      <div style={{ overflowY: 'auto', flex: 1, padding: '0 3px', margin: '0 -3px' }}>
         {filtered.map(grup => (
           <div key={grup.strokes} style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 10, color: '#9abaa8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
