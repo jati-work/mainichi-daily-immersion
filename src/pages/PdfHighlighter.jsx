@@ -181,6 +181,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [editingTeksId, setEditingTeksId] = useState(null)
   const [showKonfirmasiHapus, setShowKonfirmasiHapus] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportProgress, setExportProgress] = useState(0)
   const [draggingId, setDraggingId] = useState(null)
   const [dragOffset, setDragOffset] = useState({ dx: 0, dy: 0 })
   const [resizingFontId, setResizingFontId] = useState(null)
@@ -427,6 +428,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   async function unduhPdf() {
     if (!pdfDoc || exporting) return
     setExporting(true)
+    setExportProgress(0)
     try {
       const EXPORT_SCALE = 2
       let doc = null
@@ -471,6 +473,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
           doc.addPage([off.width, off.height])
         }
         doc.addImage(imgData, 'JPEG', 0, 0, off.width, off.height)
+        setExportProgress(Math.round((i / numPages) * 100))
       }
       const namaFile = (pdfPath?.split('/').pop()?.replace(/\.pdf$/i, '') || 'dokumen') + '-anotasi.pdf'
       doc.save(namaFile)
@@ -479,6 +482,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
       alert('Gagal mengunduh PDF: ' + (err?.message || 'terjadi kesalahan'))
     } finally {
       setExporting(false)
+      setExportProgress(0)
     }
   }
 
@@ -605,15 +609,34 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
           {onHapusPdf && (
             <button className="icon-btn danger" onClick={() => setShowKonfirmasiHapus(true)} title="Hapus PDF">🗑️</button>
           )}
-          <button
-            className="icon-btn"
-            onClick={unduhPdf}
-            disabled={exporting || !pdfDoc}
-            title="Unduh PDF dengan highlight & catatan"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: exporting ? 0.6 : 1 }}
-          >
-            {exporting ? <span style={{ fontSize: 11 }}>...</span> : <IconDownload color="#2d6a4a" size={16} />}
-          </button>
+          <div style={{ position: 'relative', width: 34, height: 34 }}>
+            {exporting && (
+              <svg
+                width={34} height={34} viewBox="0 0 34 34"
+                style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)', pointerEvents: 'none' }}
+              >
+                <circle cx={17} cy={17} r={15} fill="none" stroke="rgba(45,106,74,.18)" strokeWidth={2.5} />
+                <circle
+                  cx={17} cy={17} r={15} fill="none" stroke="#2d6a4a" strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * 15}
+                  strokeDashoffset={2 * Math.PI * 15 * (1 - exportProgress / 100)}
+                  style={{ transition: 'stroke-dashoffset .2s ease' }}
+                />
+              </svg>
+            )}
+            <button
+              className="icon-btn"
+              onClick={unduhPdf}
+              disabled={exporting || !pdfDoc}
+              title={exporting ? `Mengunduh... ${exportProgress}%` : 'Unduh PDF dengan highlight & catatan'}
+              style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: exporting ? 0.85 : 1 }}
+            >
+              {exporting
+                ? <span style={{ fontSize: 9, fontWeight: 700, color: '#2d6a4a' }}>{exportProgress}%</span>
+                : <IconDownload color="#2d6a4a" size={16} />}
+            </button>
+          </div>
           <button className="icon-btn" onClick={onClose}>✕</button>
         </div>
       </div>
