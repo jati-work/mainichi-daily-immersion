@@ -74,7 +74,7 @@ const RADIKAL = [
   ]},
 ]
 
-export default function RadicalPicker({ onPilih, onClose, variant = 'overlay' }) {
+export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', open = true, onToggle }) {
   const [cari, setCari] = useState('')
   const [custom, setCustom] = useState([])
   const [showTambah, setShowTambah] = useState(false)
@@ -200,6 +200,36 @@ export default function RadicalPicker({ onPilih, onClose, variant = 'overlay' })
       </div>
     </>
   )
+
+  const LEBAR_PANEL = 300
+
+  if (variant === 'panel') {
+    return (
+      <>
+        <div style={{
+          position: 'fixed', top: 0, right: open ? 0 : -LEBAR_PANEL, width: LEBAR_PANEL, height: '100vh',
+          background: '#fff', display: 'flex', flexDirection: 'column', padding: 16, boxSizing: 'border-box',
+          boxShadow: '-6px 0 24px rgba(0,0,0,.15)', zIndex: 200, transition: 'right .25s ease',
+        }}>
+          {isi}
+        </div>
+        <button
+          onClick={onToggle}
+          title="Bantuan cari radikal"
+          style={{
+            position: 'fixed', top: '38%', right: open ? LEBAR_PANEL : 0, transform: 'translateY(-50%)',
+            width: 34, height: 68, borderRadius: '8px 0 0 8px', border: 'none',
+            background: '#2d6a4a', color: '#fff', fontSize: 13, fontWeight: 700, letterSpacing: '.05em',
+            cursor: 'pointer', zIndex: 201, transition: 'right .25s ease',
+            writingMode: 'vertical-rl', boxShadow: '-3px 3px 10px rgba(0,0,0,.18)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          部首
+        </button>
+      </>
+    )
+  }
 
   if (variant === 'sidebar') {
     return (
