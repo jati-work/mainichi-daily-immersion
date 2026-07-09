@@ -74,7 +74,7 @@ const RADIKAL = [
   ]},
 ]
 
-export default function RadicalPicker({ onPilih, onClose }) {
+export default function RadicalPicker({ onPilih, onClose, variant = 'overlay' }) {
   const [cari, setCari] = useState('')
   const [custom, setCustom] = useState([])
   const [showTambah, setShowTambah] = useState(false)
@@ -120,88 +120,106 @@ export default function RadicalPicker({ onPilih, onClose }) {
     ),
   })).filter(grup => grup.items.length > 0)
 
+  const isi = (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#2d6a4a' }}>部首 Radikal</div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button onClick={() => setShowTambah(s => !s)}
+            style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1.5px solid #b8d8b8', background: showTambah ? '#2d6a4a' : '#fff', color: showTambah ? '#fff' : '#2d6a4a', cursor: 'pointer' }}>
+            ＋ Tambah
+          </button>
+          {onClose && <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>}
+        </div>
+      </div>
+
+      {showTambah && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, padding: 8, background: '#f0f7f0', borderRadius: 8, flexWrap: 'wrap' }}>
+          <input placeholder="Karakter" value={karakterBaru} onChange={e => setKarakterBaru(e.target.value)}
+            style={{ width: 50, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", fontSize: 14 }} />
+          <input placeholder="Nama (opsional)" value={namaBaru} onChange={e => setNamaBaru(e.target.value)}
+            style={{ flex: 1, minWidth: 60, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
+          <input placeholder="Goresan" type="number" min="1" value={strokesBaru} onChange={e => setStrokesBaru(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && tambahRadikal()}
+            style={{ width: 50, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
+          <button onClick={tambahRadikal}
+            style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: '#2d6a4a', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+            Simpan
+          </button>
+        </div>
+      )}
+
+      <input
+        placeholder="Cari nama radikal (misal: te, mizu, kuchi)..."
+        value={cari}
+        onChange={e => setCari(e.target.value)}
+        style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', marginBottom: 10, fontSize: 12, width: '100%', boxSizing: 'border-box' }}
+      />
+
+      <div style={{ overflowY: 'auto', flex: 1 }}>
+        {filtered.map(grup => (
+          <div key={grup.strokes} style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, color: '#9abaa8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+              {grup.strokes} goresan
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {grup.items.map(it => (
+                <div key={it.id || it.char} style={{ position: 'relative' }}>
+                  <button
+                    title={it.nama}
+                    onClick={() => onPilih(it.char)}
+                    style={{
+                      fontFamily: "'Noto Serif JP', serif", fontSize: 18, padding: '5px 8px',
+                      borderRadius: 8, border: it.custom ? '1.5px solid #7aaa8a' : '1.5px solid #b8d8b8',
+                      background: it.custom ? '#e6f2e8' : '#f0f7f0', cursor: 'pointer',
+                    }}
+                  >
+                    {it.char}
+                  </button>
+                  {it.custom && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); hapusCustom(it.id) }}
+                      title="Hapus radikal ini"
+                      style={{
+                        position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%',
+                        border: 'none', background: '#c0392b', color: '#fff', fontSize: 9, lineHeight: 1,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: 20 }}>
+            Gak ketemu radikal dengan nama itu.
+          </div>
+        )}
+      </div>
+    </>
+  )
+
+  if (variant === 'sidebar') {
+    return (
+      <div style={{
+        position: 'absolute', top: 0, left: '100%', marginLeft: 12, width: 260, maxHeight: 480,
+        background: '#fff', borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column',
+        boxShadow: '0 6px 24px rgba(0,0,0,.18)', border: '1px solid #e0ede2', zIndex: 5,
+      }}>
+        {isi}
+      </div>
+    )
+  }
+
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{ background: '#fff', borderRadius: 14, padding: 20, width: 400, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,.2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#2d6a4a' }}>部首 Pilih Radikal</div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button onClick={() => setShowTambah(s => !s)}
-              style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1.5px solid #b8d8b8', background: showTambah ? '#2d6a4a' : '#fff', color: showTambah ? '#fff' : '#2d6a4a', cursor: 'pointer' }}>
-              ＋ Tambah
-            </button>
-            {onClose && <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>}
-          </div>
-        </div>
-
-        {showTambah && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, padding: 8, background: '#f0f7f0', borderRadius: 8 }}>
-            <input placeholder="Karakter" value={karakterBaru} onChange={e => setKarakterBaru(e.target.value)}
-              style={{ width: 60, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", fontSize: 14 }} />
-            <input placeholder="Nama (opsional)" value={namaBaru} onChange={e => setNamaBaru(e.target.value)}
-              style={{ flex: 1, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
-            <input placeholder="Goresan" type="number" min="1" value={strokesBaru} onChange={e => setStrokesBaru(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && tambahRadikal()}
-              style={{ width: 60, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
-            <button onClick={tambahRadikal}
-              style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: '#2d6a4a', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-              Simpan
-            </button>
-          </div>
-        )}
-
-        <input
-          placeholder="Cari nama radikal (misal: te, mizu, kuchi)..."
-          value={cari}
-          onChange={e => setCari(e.target.value)}
-          style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', marginBottom: 10, fontSize: 12 }}
-        />
-
-        <div style={{ overflowY: 'auto', flex: 1 }}>
-          {filtered.map(grup => (
-            <div key={grup.strokes} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 10, color: '#9abaa8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
-                {grup.strokes} goresan
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {grup.items.map(it => (
-                  <div key={it.id || it.char} style={{ position: 'relative' }}>
-                    <button
-                      title={it.nama}
-                      onClick={() => onPilih(it.char)}
-                      style={{
-                        fontFamily: "'Noto Serif JP', serif", fontSize: 20, padding: '6px 10px',
-                        borderRadius: 8, border: it.custom ? '1.5px solid #7aaa8a' : '1.5px solid #b8d8b8',
-                        background: it.custom ? '#e6f2e8' : '#f0f7f0', cursor: 'pointer',
-                      }}
-                    >
-                      {it.char}
-                    </button>
-                    {it.custom && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); hapusCustom(it.id) }}
-                        title="Hapus radikal ini"
-                        style={{
-                          position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%',
-                          border: 'none', background: '#c0392b', color: '#fff', fontSize: 9, lineHeight: 1,
-                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >✕</button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: 20 }}>
-              Gak ketemu radikal dengan nama itu.
-            </div>
-          )}
-        </div>
+        {isi}
       </div>
     </div>
   )
