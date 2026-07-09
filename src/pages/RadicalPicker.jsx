@@ -78,6 +78,7 @@ export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', o
   const [cari, setCari] = useState('')
   const [custom, setCustom] = useState([])
   const [showTambah, setShowTambah] = useState(false)
+  const [showHapus, setShowHapus] = useState(false)
   const [karakterBaru, setKarakterBaru] = useState('')
   const [namaBaru, setNamaBaru] = useState('')
   const [strokesBaru, setStrokesBaru] = useState('')
@@ -100,7 +101,6 @@ export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', o
   }
 
   async function hapusCustom(id) {
-    if (!confirm('Hapus radikal ini dari daftar kamu?')) return
     await supabase.from('custom_radikal').delete().eq('id', id)
     muatCustom()
   }
@@ -122,28 +122,39 @@ export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', o
 
   const isi = (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#2d6a4a' }}>部首 Radikal</div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button onClick={() => setShowTambah(s => !s)}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => { setShowTambah(s => !s); setShowHapus(false) }}
             style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1.5px solid #b8d8b8', background: showTambah ? '#2d6a4a' : '#fff', color: showTambah ? '#fff' : '#2d6a4a', cursor: 'pointer' }}>
             ＋ Tambah
           </button>
-          {onClose && <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>}
+          <button onClick={() => { setShowHapus(s => !s); setShowTambah(false) }}
+            style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1.5px solid #d8b8b8', background: showHapus ? '#c0392b' : '#fff', color: showHapus ? '#fff' : '#c0392b', cursor: 'pointer' }}>
+            🗑️ Hapus
+          </button>
         </div>
       </div>
+      {showHapus && (
+        <div style={{ fontSize: 11, color: '#c0392b', marginBottom: 8, textAlign: 'center' }}>
+          Klik radikal tambahan kamu (warna beda) buat hapus
+        </div>
+      )}
 
       {showTambah && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, padding: 8, background: '#f0f7f0', borderRadius: 8, flexWrap: 'wrap' }}>
-          <input placeholder="Karakter" value={karakterBaru} onChange={e => setKarakterBaru(e.target.value)}
-            style={{ width: 50, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", fontSize: 14 }} />
-          <input placeholder="Nama (opsional)" value={namaBaru} onChange={e => setNamaBaru(e.target.value)}
-            style={{ flex: 1, minWidth: 60, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
-          <input placeholder="Goresan" type="number" min="1" value={strokesBaru} onChange={e => setStrokesBaru(e.target.value)}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10, padding: 10, background: '#f0f7f0', borderRadius: 8 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input placeholder="Karakter" value={karakterBaru} onChange={e => setKarakterBaru(e.target.value)}
+              style={{ flex: 1, padding: 8, borderRadius: 6, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", fontSize: 16, boxSizing: 'border-box' }} />
+            <input placeholder="Goresan" type="number" min="1" value={strokesBaru} onChange={e => setStrokesBaru(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && tambahRadikal()}
+              style={{ flex: 1, padding: 8, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 13, boxSizing: 'border-box' }} />
+          </div>
+          <input placeholder="Nama (opsional, misal: sanzui)" value={namaBaru} onChange={e => setNamaBaru(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && tambahRadikal()}
-            style={{ width: 50, padding: 6, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
+            style={{ width: '100%', padding: 8, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 13, boxSizing: 'border-box' }} />
           <button onClick={tambahRadikal}
-            style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: '#2d6a4a', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+            style={{ width: '100%', padding: 8, borderRadius: 6, border: 'none', background: '#2d6a4a', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             Simpan
           </button>
         </div>
@@ -164,30 +175,24 @@ export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', o
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {grup.items.map(it => (
-                <div key={it.id || it.char} style={{ position: 'relative' }}>
-                  <button
-                    title={it.nama}
-                    onClick={() => onPilih(it.char)}
-                    style={{
-                      fontFamily: "'Noto Serif JP', serif", fontSize: 18, padding: '5px 8px',
-                      borderRadius: 8, border: it.custom ? '1.5px solid #7aaa8a' : '1.5px solid #b8d8b8',
-                      background: it.custom ? '#e6f2e8' : '#f0f7f0', cursor: 'pointer',
-                    }}
-                  >
-                    {it.char}
-                  </button>
-                  {it.custom && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); hapusCustom(it.id) }}
-                      title="Hapus radikal ini"
-                      style={{
-                        position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%',
-                        border: 'none', background: '#c0392b', color: '#fff', fontSize: 9, lineHeight: 1,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}
-                    >✕</button>
-                  )}
-                </div>
+                <button
+                  key={it.id || it.char}
+                  title={it.nama}
+                  onClick={() => {
+                    if (showHapus) { if (it.custom) hapusCustom(it.id); return }
+                    onPilih(it.char)
+                  }}
+                  style={{
+                    fontFamily: "'Noto Serif JP', serif", fontSize: 18, padding: '5px 8px',
+                    borderRadius: 8, cursor: 'pointer',
+                    border: '1.5px solid #b8d8b8', background: '#f0f7f0',
+                    opacity: showHapus && !it.custom ? 0.4 : 1,
+                    outline: showHapus && it.custom ? '2px solid #c0392b' : 'none',
+                    outlineOffset: 1,
+                  }}
+                >
+                  {it.char}
+                </button>
               ))}
             </div>
           </div>
