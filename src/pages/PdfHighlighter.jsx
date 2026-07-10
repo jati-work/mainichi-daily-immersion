@@ -162,6 +162,13 @@ function HighlightBox({ data, onHapus, hapusMode, modeUji, revealed, onToggleRev
   )
 }
 
+function bacaPreferensi(key, fallback) {
+  try {
+    const v = localStorage.getItem(key)
+    return v !== null ? JSON.parse(v) : fallback
+  } catch { return fallback }
+}
+
 // paketId, pdfPath, pdfUrl (signed url), onClose, onHapusPdf: props dari PaketDetail
 export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHapusPdf }) {
   const [pdfDoc, setPdfDoc] = useState(null)
@@ -176,12 +183,19 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [mode, setMode] = useState(null) // null | 'highlight' | 'text' | 'pen' | 'hapus'
   const [modeUji, setModeUji] = useState(false) // mode "aka shiito": highlight ditutup solid buat uji hafalan
   const [revealedIds, setRevealedIds] = useState(() => new Set())
-  const [warnaHighlight, setWarnaHighlight] = useState(WARNA_HIGHLIGHT[0])
-  const [warnaTeks, setWarnaTeks] = useState(WARNA_TEKS[0])
-  const [warnaPen, setWarnaPen] = useState(WARNA_PEN[0])
-  const [tebalPen, setTebalPen] = useState(3)
+  const [warnaHighlight, setWarnaHighlight] = useState(() => bacaPreferensi('pref-warnaHighlight', WARNA_HIGHLIGHT[0]))
+  const [warnaTeks, setWarnaTeks] = useState(() => bacaPreferensi('pref-warnaTeks', WARNA_TEKS[0]))
+  const [warnaPen, setWarnaPen] = useState(() => bacaPreferensi('pref-warnaPen', WARNA_PEN[0]))
+  const [tebalPen, setTebalPen] = useState(() => bacaPreferensi('pref-tebalPen', 3))
   const [penAktif, setPenAktif] = useState(null) // { points: [{x,y}, ...] } saat lagi digambar
   const [drawing, setDrawing] = useState(null)
+
+  // simpen preferensi warna/ukuran tool ke localStorage, biar tetep nempel
+  // walau mode ganti-ganti atau PDF-nya ditutup & dibuka lagi nanti
+  useEffect(() => { localStorage.setItem('pref-warnaHighlight', JSON.stringify(warnaHighlight)) }, [warnaHighlight])
+  useEffect(() => { localStorage.setItem('pref-warnaTeks', JSON.stringify(warnaTeks)) }, [warnaTeks])
+  useEffect(() => { localStorage.setItem('pref-warnaPen', JSON.stringify(warnaPen)) }, [warnaPen])
+  useEffect(() => { localStorage.setItem('pref-tebalPen', JSON.stringify(tebalPen)) }, [tebalPen])
   const [editingTeksId, setEditingTeksId] = useState(null)
   const [showKonfirmasiHapus, setShowKonfirmasiHapus] = useState(false)
   const [exporting, setExporting] = useState(false)
