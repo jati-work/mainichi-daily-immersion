@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import PdfHighlighter from './PdfHighlighter'
 import DiaryHalaman from './DiaryHalaman'
@@ -31,6 +31,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [bagianInput, setBagianInput] = useState('')
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
+  const jpInputRef = useRef(null)
   const [showPdf, setShowPdf] = useState(false)
   const [showDiary, setShowDiary] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -124,8 +125,19 @@ export default function PaketDetail({ paketId, goTo }) {
       })
       if (error) { alert('Gagal simpan: ' + error.message); return }
     }
-    batalForm()
+    // abis simpan/update kata, form-nya sengaja TETEP kebuka (beda sama
+    // form-form lain) biar bisa langsung nambah/edit kata berikutnya tanpa
+    // buka form & pilih bagian dari awal lagi
+    resetFieldsKataSaja()
     muatSemua()
+  }
+
+  // reset isian kata doang, form-nya TETEP kebuka & bagian yang lagi
+  // dipilih TETEP kesimpen (beda sama batalForm yang nutup form total)
+  function resetFieldsKataSaja() {
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu('')
+    setEditingId(null)
+    setTimeout(() => jpInputRef.current?.focus(), 0)
   }
 
   function batalForm() {
@@ -453,7 +465,7 @@ async function hapusPdf() {
             </select>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            <input placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
+            <input ref={jpInputRef} placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
               style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
             <input placeholder="Contoh kalimat (opsional)" value={contohKalimat} onChange={e => setContohKalimat(e.target.value)}
               style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
