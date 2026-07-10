@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 
 const WARNA_HIGHLIGHT = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
 const WARNA_TEKS = ['#2d6a4a', '#c0392b', '#1565c0', '#8e44ad', '#000000']
+const WARNA_PEN = ['#e53935', '#1565c0', '#2d6a4a', '#000000', '#f9a825']
 
 // Ukuran "kertas" FIXED (px) — sengaja gak pakai flex:1/height:100% biar
 // posisi highlight & catatan (disimpan sbg % dari rect ini) selalu konsisten
@@ -169,11 +170,14 @@ export default function DiaryHalaman({ paketId, onClose }) {
   const [showKonfirmasiBuka, setShowKonfirmasiBuka] = useState(false)
 
   const [anotasi, setAnotasi] = useState([])
-  const [mode, setMode] = useState(null) // null | 'highlight' | 'text' | 'hapus'
+  const [mode, setMode] = useState(null) // null | 'highlight' | 'text' | 'pen' | 'hapus'
   const [modeUji, setModeUji] = useState(false) // mode "aka shiito": highlight ditutup solid buat uji hafalan
   const [revealedIds, setRevealedIds] = useState(() => new Set()) // highlight yg lagi "dibuka" pas mode uji
   const [warnaHighlight, setWarnaHighlight] = useState(WARNA_HIGHLIGHT[0])
   const [warnaTeks, setWarnaTeks] = useState(WARNA_TEKS[0])
+  const [warnaPen, setWarnaPen] = useState(WARNA_PEN[0])
+  const [tebalPen, setTebalPen] = useState(3)
+  const [penAktif, setPenAktif] = useState(null) // { points: [{x,y}, ...] } saat lagi digambar
   const [drawing, setDrawing] = useState(null)
   const [editingTeksId, setEditingTeksId] = useState(null)
   const [draggingId, setDraggingId] = useState(null)
@@ -386,6 +390,9 @@ export default function DiaryHalaman({ paketId, onClose }) {
     if (mode === 'highlight') {
       const { x, y } = posisiRelatif(e)
       setDrawing({ startX: x, startY: y, x, y, width: 0, height: 0 })
+    } else if (mode === 'pen') {
+      const p = posisiRelatif(e)
+      setPenAktif({ points: [p] })
     } else if (mode === 'text' && e.target === overlayRef.current) {
       const { x, y } = posisiRelatif(e)
       tambahCatatan(x, y)
@@ -397,6 +404,11 @@ export default function DiaryHalaman({ paketId, onClose }) {
       const nx = Math.min(Math.max(pos.x - dragOffset.dx, 0), 1)
       const ny = Math.min(Math.max(pos.y - dragOffset.dy, 0), 1)
       setAnotasi(a => a.map(item => (item.id === draggingId ? { ...item, x: nx, y: ny } : item)))
+      return
+    }
+    if (penAktif) {
+      const p = posisiRelatif(e)
+      setPenAktif(cur => ({ points: [...cur.points, p] }))
       return
     }
     if (!drawing) return
@@ -411,6 +423,16 @@ export default function DiaryHalaman({ paketId, onClose }) {
   }
   async function handleOverlayMouseUp() {
     if (draggingId) { await selesaiDrag(); return }
+    if (penAktif) {
+      const points = penAktif.points
+      setPenAktif(null)
+      if (points.length < 2) return
+      const baru = { diary_page_id: halamanAktif.id, x: 0, y: 0, width: 0, height: 0, color: warnaPen, thickness: tebalPen, points, type: 'pen' }
+      const { data, error } = await supabase.from('diary_highlights').insert(baru).select().single()
+      if (error) { alert('Gagal simpan coretan: ' + error.message); return }
+      setAnotasi(a => [...a, data])
+      return
+    }
     if (!drawing) return
     const { x, y, width, height } = drawing
     setDrawing(null)
@@ -452,8 +474,9 @@ export default function DiaryHalaman({ paketId, onClose }) {
     if (item) await supabase.from('diary_highlights').update({ x: item.x, y: item.y }).eq('id', id)
   }
 
-  const highlightList = anotasi.filter(a => a.type !== 'text')
+  const highlightList = anotasi.filter(a => a.type === 'highlight')
   const teksList = anotasi.filter(a => a.type === 'text')
+  const penList = anotasi.filter(a => a.type === 'pen')
 
   return (
     <div className="pdf-panel">
@@ -510,6 +533,12 @@ export default function DiaryHalaman({ paketId, onClose }) {
               >🖍️</button>
               <button
                 className="icon-btn"
+                onClick={() => pilihMode('pen')}
+                title="Pena (gambar bebas)"
+                style={{ background: mode === 'pen' ? '#2d6a4a' : '#fff', color: mode === 'pen' ? '#2d6a4a' : '#fff', border: '1.5px solid #2d6a4a' }}
+              >🖊️</button>
+              <button
+                className="icon-btn"
                 onClick={() => pilihMode('text')}
                 title="Catatan teks"
                 style={{
@@ -541,6 +570,27 @@ export default function DiaryHalaman({ paketId, onClose }) {
                   }}
                 />
               ))}
+              {mode === 'pen' && (
+                <>
+                  {WARNA_PEN.map(w => (
+                    <button
+                      key={w}
+                      onClick={() => setWarnaPen(w)}
+                      title={w}
+                      style={{
+                        width: 20, height: 20, borderRadius: '50%', background: w, cursor: 'pointer',
+                        border: warnaPen === w ? '2px solid #1a1a1a' : '1px solid rgba(0,0,0,.2)',
+                      }}
+                    />
+                  ))}
+                  <input
+                    type="range" min={1} max={10} step={1} value={tebalPen}
+                    onChange={e => setTebalPen(Number(e.target.value))}
+                    title={`Ketebalan: ${tebalPen}px`}
+                    style={{ width: 70 }}
+                  />
+                </>
+              )}
               {mode === 'text' && WARNA_TEKS.map(w => (
                 <button
                   key={w}
@@ -606,10 +656,10 @@ export default function DiaryHalaman({ paketId, onClose }) {
                 onMouseDown={handleOverlayMouseDown}
                 onMouseMove={handleOverlayMouseMove}
                 onMouseUp={handleOverlayMouseUp}
-                onMouseLeave={() => { setDrawing(null); selesaiDrag() }}
+                onMouseLeave={() => { setDrawing(null); setPenAktif(null); selesaiDrag() }}
                 style={{
                   position: 'absolute', inset: 0,
-                  cursor: mode === 'highlight' ? 'crosshair' : mode === 'text' ? 'text' : 'default',
+                  cursor: mode === 'highlight' || mode === 'pen' ? 'crosshair' : mode === 'text' ? 'text' : 'default',
                 }}
               >
                 {highlightList.map(h => (
@@ -623,6 +673,36 @@ export default function DiaryHalaman({ paketId, onClose }) {
                     onToggleReveal={toggleReveal}
                   />
                 ))}
+                {penList.map(p => (
+                  <svg
+                    key={p.id}
+                    width="100%" height="100%"
+                    viewBox={`0 0 ${PAPER_WIDTH} ${PAPER_HEIGHT}`}
+                    style={{ position: 'absolute', inset: 0, pointerEvents: mode === 'hapus' ? 'stroke' : 'none', cursor: mode === 'hapus' ? 'pointer' : 'default' }}
+                    onClick={() => { if (mode === 'hapus') hapusAnotasi(p.id) }}
+                  >
+                    <polyline
+                      points={(p.points || []).map(pt => `${pt.x * PAPER_WIDTH},${pt.y * PAPER_HEIGHT}`).join(' ')}
+                      fill="none"
+                      stroke={p.color}
+                      strokeWidth={p.thickness || 3}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ))}
+                {penAktif && (
+                  <svg width="100%" height="100%" viewBox={`0 0 ${PAPER_WIDTH} ${PAPER_HEIGHT}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                    <polyline
+                      points={penAktif.points.map(pt => `${pt.x * PAPER_WIDTH},${pt.y * PAPER_HEIGHT}`).join(' ')}
+                      fill="none"
+                      stroke={warnaPen}
+                      strokeWidth={tebalPen}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
                 {teksList.map(t => (
                   <CatatanTeks
                     key={t.id}
