@@ -465,17 +465,20 @@ async function hapusPdf() {
             </select>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            <input ref={jpInputRef} placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
+            <input ref={jpInputRef} tabIndex={1} placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && simpanKata()}
               style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
-            <input placeholder="Contoh kalimat (opsional)" value={contohKalimat} onChange={e => setContohKalimat(e.target.value)}
+            <input tabIndex={3} placeholder="Contoh kalimat (opsional)" value={contohKalimat} onChange={e => setContohKalimat(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && simpanKata()}
               style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
-            <input placeholder="Arti ID" value={arti} onChange={e => setArti(e.target.value)}
+            <input tabIndex={2} placeholder="Arti ID" value={arti} onChange={e => setArti(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && simpanKata()}
               style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-            <input placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
+            <input tabIndex={4} placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && simpanKata()}
               style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
             <div style={{ gridColumn: '1 / -1' }}>
-              <button className="act-btn active" onClick={simpanKata}
+              <button tabIndex={5} className="act-btn active" onClick={simpanKata}
                 style={{ width: '100%', padding: 10, fontWeight: 600 }}>{editingId ? 'Update' : 'Simpan'}</button>
             </div>
           </div>
