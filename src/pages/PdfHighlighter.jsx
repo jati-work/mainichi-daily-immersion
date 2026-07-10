@@ -16,6 +16,7 @@ const PDFJS_WASM_URL = '/wasm/'
 
 const WARNA_HIGHLIGHT = ['#fff176', '#a5d6a7', '#f48fb1', '#90caf9']
 const WARNA_TEKS = ['#2d6a4a', '#c0392b', '#1565c0', '#8e44ad', '#000000']
+const WARNA_PEN = ['#e53935', '#1565c0', '#2d6a4a', '#000000', '#f9a825']
 
 function IconEraser({ color = '#c0392b', size = 16 }) {
   return (
@@ -172,11 +173,14 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
 
   const [anotasi, setAnotasi] = useState([])
-  const [mode, setMode] = useState(null) // null | 'highlight' | 'text'
+  const [mode, setMode] = useState(null) // null | 'highlight' | 'text' | 'pen' | 'hapus'
   const [modeUji, setModeUji] = useState(false) // mode "aka shiito": highlight ditutup solid buat uji hafalan
   const [revealedIds, setRevealedIds] = useState(() => new Set())
   const [warnaHighlight, setWarnaHighlight] = useState(WARNA_HIGHLIGHT[0])
   const [warnaTeks, setWarnaTeks] = useState(WARNA_TEKS[0])
+  const [warnaPen, setWarnaPen] = useState(WARNA_PEN[0])
+  const [tebalPen, setTebalPen] = useState(3)
+  const [penAktif, setPenAktif] = useState(null) // { points: [{x,y}, ...] } saat lagi digambar
   const [drawing, setDrawing] = useState(null)
   const [editingTeksId, setEditingTeksId] = useState(null)
   const [showKonfirmasiHapus, setShowKonfirmasiHapus] = useState(false)
@@ -290,8 +294,9 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   useEffect(() => { muatAnotasi() }, [paketId, pdfPath])
 
   const anotasiHalIni = useMemo(() => anotasi.filter(a => a.page === pageNum), [anotasi, pageNum])
-  const highlightHalIni = useMemo(() => anotasiHalIni.filter(a => a.type !== 'text'), [anotasiHalIni])
+  const highlightHalIni = useMemo(() => anotasiHalIni.filter(a => a.type === 'highlight'), [anotasiHalIni])
   const teksHalIni = useMemo(() => anotasiHalIni.filter(a => a.type === 'text'), [anotasiHalIni])
+  const penHalIni = useMemo(() => anotasiHalIni.filter(a => a.type === 'pen'), [anotasiHalIni])
 
   // keluar dari mode uji tiap ganti halaman PDF
   useEffect(() => {
@@ -397,6 +402,9 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     if (mode === 'highlight') {
       const { x, y } = posisiRelatif(e)
       setDrawing({ startX: x, startY: y, x, y, width: 0, height: 0 })
+    } else if (mode === 'pen') {
+      const p = posisiRelatif(e)
+      setPenAktif({ points: [p] })
     } else if (mode === 'text' && e.target === overlayRef.current) {
       const { x, y } = posisiRelatif(e)
       tambahTeks(x, y)
@@ -416,6 +424,11 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
       setAnotasi(a => a.map(item => (item.id === draggingId ? { ...item, x: nx, y: ny } : item)))
       return
     }
+    if (penAktif) {
+      const p = posisiRelatif(e)
+      setPenAktif(cur => ({ points: [...cur.points, p] }))
+      return
+    }
     if (!drawing) return
     const { x: curX, y: curY } = posisiRelatif(e)
     setDrawing(d => ({
@@ -429,6 +442,16 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   async function handleOverlayMouseUp() {
     if (resizingFontId) { await selesaiResizeFont(); return }
     if (draggingId) { await selesaiDrag(); return }
+    if (penAktif) {
+      const points = penAktif.points
+      setPenAktif(null)
+      if (points.length < 2) return
+      const baru = { paket_id: paketId, pdf_path: pdfPath, page: pageNum, x: 0, y: 0, width: 0, height: 0, color: warnaPen, thickness: tebalPen, points, type: 'pen' }
+      const { data, error } = await supabase.from('pdf_highlights').insert(baru).select().single()
+      if (error) { alert('Gagal simpan coretan: ' + error.message); return }
+      setAnotasi(a => [...a, data])
+      return
+    }
     if (!drawing) return
     const { x, y, width, height } = drawing
     setDrawing(null)
@@ -479,12 +502,27 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
 
         const anotasiHal = anotasi.filter(a => a.page === i)
 
-        anotasiHal.filter(a => a.type !== 'text').forEach(h => {
+        anotasiHal.filter(a => a.type === 'highlight').forEach(h => {
           ctx.save()
           ctx.globalAlpha = 0.4
           ctx.globalCompositeOperation = 'multiply'
           ctx.fillStyle = h.color
           ctx.fillRect(h.x * off.width, h.y * off.height, h.width * off.width, h.height * off.height)
+          ctx.restore()
+        })
+
+        anotasiHal.filter(a => a.type === 'pen' && a.points?.length > 1).forEach(p => {
+          ctx.save()
+          ctx.strokeStyle = p.color
+          ctx.lineWidth = (p.thickness || 3) * EXPORT_SCALE
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+          ctx.beginPath()
+          p.points.forEach((pt, idx) => {
+            const px = pt.x * off.width, py = pt.y * off.height
+            if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
+          })
+          ctx.stroke()
           ctx.restore()
         })
 
@@ -580,6 +618,12 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
               >🖍️</button>
               <button
                 className="icon-btn"
+                onClick={() => pilihMode('pen')}
+                title="Pena (gambar bebas)"
+                style={{ background: mode === 'pen' ? '#2d6a4a' : '#fff', color: mode === 'pen' ? '#2d6a4a' : '#fff', border: '1.5px solid #2d6a4a' }}
+              >🖊️</button>
+              <button
+                className="icon-btn"
                 onClick={() => pilihMode('text')}
                 title="Catatan teks"
                 style={{
@@ -611,6 +655,27 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                   }}
                 />
               ))}
+              {mode === 'pen' && (
+                <>
+                  {WARNA_PEN.map(w => (
+                    <button
+                      key={w}
+                      onClick={() => setWarnaPen(w)}
+                      title={w}
+                      style={{
+                        width: 20, height: 20, borderRadius: '50%', background: w, cursor: 'pointer',
+                        border: warnaPen === w ? '2px solid #fff' : '1px solid rgba(255,255,255,.5)',
+                      }}
+                    />
+                  ))}
+                  <input
+                    type="range" min={1} max={10} step={1} value={tebalPen}
+                    onChange={e => setTebalPen(Number(e.target.value))}
+                    title={`Ketebalan: ${tebalPen}px`}
+                    style={{ width: 70, accentColor: '#fff' }}
+                  />
+                </>
+              )}
               {mode === 'text' && WARNA_TEKS.map(w => (
                 <button
                   key={w}
@@ -694,10 +759,10 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
               onMouseDown={handleOverlayMouseDown}
               onMouseMove={handleOverlayMouseMove}
               onMouseUp={handleOverlayMouseUp}
-              onMouseLeave={() => { setDrawing(null); selesaiDrag(); selesaiResizeFont() }}
+              onMouseLeave={() => { setDrawing(null); setPenAktif(null); selesaiDrag(); selesaiResizeFont() }}
               style={{
                 position: 'absolute', inset: 0,
-                cursor: mode === 'highlight' ? 'crosshair' : mode === 'text' ? 'text' : 'default',
+                cursor: mode === 'highlight' || mode === 'pen' ? 'crosshair' : mode === 'text' ? 'text' : 'default',
               }}
             >
               {highlightHalIni.map(h => (
@@ -724,6 +789,38 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                   onResizeFont={mulaiResizeFont}
                 />
               ))}
+
+              {penHalIni.map(p => (
+                <svg
+                  key={p.id}
+                  width="100%" height="100%"
+                  viewBox={`0 0 ${canvasSize.width || 1} ${canvasSize.height || 1}`}
+                  style={{ position: 'absolute', inset: 0, pointerEvents: mode === 'hapus' ? 'stroke' : 'none', cursor: mode === 'hapus' ? 'pointer' : 'default' }}
+                  onClick={() => { if (mode === 'hapus') hapusAnotasi(p.id) }}
+                >
+                  <polyline
+                    points={(p.points || []).map(pt => `${pt.x * canvasSize.width},${pt.y * canvasSize.height}`).join(' ')}
+                    fill="none"
+                    stroke={p.color}
+                    strokeWidth={(p.thickness || 3) * scale}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ))}
+
+              {penAktif && (
+                <svg width="100%" height="100%" viewBox={`0 0 ${canvasSize.width || 1} ${canvasSize.height || 1}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                  <polyline
+                    points={penAktif.points.map(pt => `${pt.x * canvasSize.width},${pt.y * canvasSize.height}`).join(' ')}
+                    fill="none"
+                    stroke={warnaPen}
+                    strokeWidth={tebalPen * scale}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
 
               {drawing && (
                 <div style={{
