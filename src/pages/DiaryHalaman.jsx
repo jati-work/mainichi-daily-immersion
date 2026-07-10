@@ -159,6 +159,13 @@ function HighlightBox({ data, onHapus, hapusMode, modeUji, revealed, onToggleRev
   )
 }
 
+function bacaPreferensi(key, fallback) {
+  try {
+    const v = localStorage.getItem(key)
+    return v !== null ? JSON.parse(v) : fallback
+  } catch { return fallback }
+}
+
 // paketId, onClose: props dari PaketDetail
 export default function DiaryHalaman({ paketId, onClose }) {
   const [halaman, setHalaman] = useState([]) // array, index 0 = terbaru
@@ -173,11 +180,16 @@ export default function DiaryHalaman({ paketId, onClose }) {
   const [mode, setMode] = useState(null) // null | 'highlight' | 'text' | 'pen' | 'hapus'
   const [modeUji, setModeUji] = useState(false) // mode "aka shiito": highlight ditutup solid buat uji hafalan
   const [revealedIds, setRevealedIds] = useState(() => new Set()) // highlight yg lagi "dibuka" pas mode uji
-  const [warnaHighlight, setWarnaHighlight] = useState(WARNA_HIGHLIGHT[0])
-  const [warnaTeks, setWarnaTeks] = useState(WARNA_TEKS[0])
-  const [warnaPen, setWarnaPen] = useState(WARNA_PEN[0])
-  const [tebalPen, setTebalPen] = useState(3)
+  const [warnaHighlight, setWarnaHighlight] = useState(() => bacaPreferensi('pref-warnaHighlight', WARNA_HIGHLIGHT[0]))
+  const [warnaTeks, setWarnaTeks] = useState(() => bacaPreferensi('pref-warnaTeks', WARNA_TEKS[0]))
+  const [warnaPen, setWarnaPen] = useState(() => bacaPreferensi('pref-warnaPen', WARNA_PEN[0]))
+  const [tebalPen, setTebalPen] = useState(() => bacaPreferensi('pref-tebalPen', 3))
   const [penAktif, setPenAktif] = useState(null) // { points: [{x,y}, ...] } saat lagi digambar
+
+  useEffect(() => { localStorage.setItem('pref-warnaHighlight', JSON.stringify(warnaHighlight)) }, [warnaHighlight])
+  useEffect(() => { localStorage.setItem('pref-warnaTeks', JSON.stringify(warnaTeks)) }, [warnaTeks])
+  useEffect(() => { localStorage.setItem('pref-warnaPen', JSON.stringify(warnaPen)) }, [warnaPen])
+  useEffect(() => { localStorage.setItem('pref-tebalPen', JSON.stringify(tebalPen)) }, [tebalPen])
   const [drawing, setDrawing] = useState(null)
   const [editingTeksId, setEditingTeksId] = useState(null)
   const [draggingId, setDraggingId] = useState(null)
