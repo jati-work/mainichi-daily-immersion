@@ -430,7 +430,7 @@ async function hapusPdf() {
             >Semua</button>
 
             {scrollState.canLeft && (
-              <button onClick={() => geserBagian(-1)} title="Geser ke kiri" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26 }}>‹</button>
+              <button onClick={() => geserBagian(-1)} title="Geser ke kiri" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26, marginRight: 3 }}>‹</button>
             )}
             <div
               ref={bagianScrollRef}
@@ -448,7 +448,7 @@ async function hapusPdf() {
               ))}
             </div>
             {scrollState.canRight && (
-              <button onClick={() => geserBagian(1)} title="Geser ke kanan" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26 }}>›</button>
+              <button onClick={() => geserBagian(1)} title="Geser ke kanan" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26, marginLeft: 3 }}>›</button>
             )}
           </div>
         )}
