@@ -420,7 +420,7 @@ async function hapusPdf() {
         .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
       <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center', gap: 10 }}>
-        <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
+        <div className="title" style={{ flexShrink: 0, marginTop: 2 }}>{paket.nama}</div>
         {bagianList.length > 0 && (
           <>
             <button
@@ -436,7 +436,7 @@ async function hapusPdf() {
               ref={bagianScrollRef}
               className="bagian-scroll"
               onScroll={updateScrollState}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, padding: '3px 4px' }}
             >
               {bagianList.map(b => (
                 <button
