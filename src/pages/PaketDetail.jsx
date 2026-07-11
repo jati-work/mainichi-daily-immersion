@@ -393,10 +393,13 @@ async function hapusPdf() {
   return (
     <div>
       <style>{`
-        .bagian-scroll::-webkit-scrollbar { height: 0; display: none; }
-        .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+        .bagian-scroll::-webkit-scrollbar { height: 6px; }
+        .bagian-scroll::-webkit-scrollbar-track { background: transparent; }
+        .bagian-scroll::-webkit-scrollbar-thumb { background: #b8d8b8; border-radius: 3px; }
+        .bagian-scroll::-webkit-scrollbar-thumb:hover { background: #9ac9a0; }
+        .bagian-scroll { scrollbar-width: thin; scrollbar-color: #b8d8b8 transparent; }
       `}</style>
-      <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center' }}>
+      <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center', minHeight: 46 }}>
         <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
         {bagianList.length > 0 && (
           <>
@@ -405,7 +408,7 @@ async function hapusPdf() {
               onClick={() => setFilterBagian('all')}
               style={{ flexShrink: 0 }}
             >Semua</button>
-            <div className="bagian-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}>
+            <div className="bagian-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, paddingBottom: 6 }}>
               {bagianList.map(b => (
                 <button
                   key={b}
