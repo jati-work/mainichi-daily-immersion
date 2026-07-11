@@ -32,9 +32,8 @@ export default function PaketDetail({ paketId, goTo }) {
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const jpInputRef = useRef(null)
-  const headerBarRef = useRef(null)
   const bagianScrollRef = useRef(null)
-  const [scrollBar, setScrollBar] = useState({ left: 0, width: 0, thumbLeft: 0, thumbWidth: 0, visible: false })
+  const [scrollState, setScrollState] = useState({ canLeft: false, canRight: false })
   const [showPdf, setShowPdf] = useState(false)
   const [showDiary, setShowDiary] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -89,64 +88,25 @@ export default function PaketDetail({ paketId, goTo }) {
 
   const bagianList = paket?.bagian_list || []
 
-  function updateScrollBarTrack() {
-    const el = bagianScrollRef.current
-    const bar = headerBarRef.current
-    if (!el || !bar) { setScrollBar(s => ({ ...s, visible: false })); return }
-    const elRect = el.getBoundingClientRect()
-    const barRect = bar.getBoundingClientRect()
-    const left = elRect.left - barRect.left
-    const width = elRect.width
-    const scrollable = el.scrollWidth > el.clientWidth + 1
-    const thumbWidth = scrollable ? Math.max((el.clientWidth / el.scrollWidth) * width, 24) : width
-    const maxScroll = el.scrollWidth - el.clientWidth
-    const thumbLeft = scrollable && maxScroll > 0 ? (el.scrollLeft / maxScroll) * (width - thumbWidth) : 0
-    setScrollBar({ left, width, thumbLeft, thumbWidth, visible: scrollable })
-  }
-
-  function handleThumbMouseDown(e) {
-    e.preventDefault()
-    e.stopPropagation()
+  function updateScrollState() {
     const el = bagianScrollRef.current
     if (!el) return
-    const startX = e.clientX
-    const startScrollLeft = el.scrollLeft
-    document.body.style.userSelect = 'none'
-    function onMove(ev) {
-      const trackWidth = scrollBar.width
-      const thumbWidth = scrollBar.thumbWidth
-      const scrollableTrack = trackWidth - thumbWidth
-      const maxScroll = el.scrollWidth - el.clientWidth
-      if (scrollableTrack <= 0 || maxScroll <= 0) return
-      const deltaPx = ev.clientX - startX
-      const scrollDelta = (deltaPx / scrollableTrack) * maxScroll
-      el.scrollLeft = Math.min(Math.max(startScrollLeft + scrollDelta, 0), maxScroll)
-    }
-    function onUp() {
-      document.body.style.userSelect = ''
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    setScrollState({
+      canLeft: el.scrollLeft > 2,
+      canRight: el.scrollLeft < el.scrollWidth - el.clientWidth - 2,
+    })
   }
 
-  function handleTrackMouseDown(e) {
+  function geserBagian(arah) {
     const el = bagianScrollRef.current
     if (!el) return
-    const trackRect = e.currentTarget.getBoundingClientRect()
-    const clickX = e.clientX - trackRect.left
-    const targetLeft = clickX - scrollBar.thumbWidth / 2
-    const scrollableTrack = scrollBar.width - scrollBar.thumbWidth
-    const maxScroll = el.scrollWidth - el.clientWidth
-    if (scrollableTrack <= 0) return
-    el.scrollLeft = Math.min(Math.max((targetLeft / scrollableTrack) * maxScroll, 0), maxScroll)
+    el.scrollBy({ left: arah * 220, behavior: 'smooth' })
   }
 
   useEffect(() => {
-    updateScrollBarTrack()
-    window.addEventListener('resize', updateScrollBarTrack)
-    return () => window.removeEventListener('resize', updateScrollBarTrack)
+    updateScrollState()
+    window.addEventListener('resize', updateScrollState)
+    return () => window.removeEventListener('resize', updateScrollState)
   }, [bagianList])
 
   function toggleFlip(id) {
@@ -459,59 +419,42 @@ async function hapusPdf() {
         .bagian-scroll::-webkit-scrollbar { height: 0; display: none; }
         .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
-      <div className="header-bar" ref={headerBarRef} style={{ flexDirection: 'column', alignItems: 'stretch', height: 64, position: 'relative', gap: 0, marginBottom: 10 }}>
-        <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', height: 40, gap: 10 }}>
-          <div className="title" style={{ flexShrink: 0, height: '100%', display: 'flex', alignItems: 'center' }}>{paket.nama}</div>
-          {bagianList.length > 0 && (
-            <>
-              <button
-                className={`act-btn ${filterBagian === 'all' ? 'active' : ''}`}
-                onClick={() => setFilterBagian('all')}
-                style={{ flexShrink: 0 }}
-              >Semua</button>
-              <div
-                ref={bagianScrollRef}
-                className="bagian-scroll"
-                onScroll={updateScrollBarTrack}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}
-              >
-                {bagianList.map(b => (
-                  <button
-                    key={b}
-                    className={`act-btn ${filterBagian === b ? 'active' : ''}`}
-                    onClick={() => setFilterBagian(b)}
-                    style={{ flexShrink: 0 }}
-                  >{b}</button>
-                ))}
-              </div>
-            </>
-          )}
-          <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10, height: '100%', display: 'flex', alignItems: 'center' }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
-          <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
-        </div>
+      <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center', gap: 10 }}>
+        <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
+        {bagianList.length > 0 && (
+          <>
+            <button
+              className={`act-btn ${filterBagian === 'all' ? 'active' : ''}`}
+              onClick={() => setFilterBagian('all')}
+              style={{ flexShrink: 0 }}
+            >Semua</button>
 
-        {scrollBar.visible && (
-          <div
-            onMouseDown={handleTrackMouseDown}
-            style={{
-              position: 'absolute', left: scrollBar.left, width: scrollBar.width, bottom: 8,
-              height: 10, display: 'flex', alignItems: 'center', cursor: 'pointer',
-            }}
-          >
-            <div style={{ width: '100%', height: 4, background: '#e8f3e8', borderRadius: 2 }}>
-              <div
-                onMouseDown={handleThumbMouseDown}
-                title="Geser buat lihat bagian lainnya"
-                style={{
-                  position: 'relative', left: scrollBar.thumbLeft, width: scrollBar.thumbWidth, height: 10, top: -3,
-                  background: '#b8d8b8', borderRadius: 5, cursor: 'grab',
-                }}
-              />
+            {scrollState.canLeft && (
+              <button onClick={() => geserBagian(-1)} title="Geser ke kiri" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26 }}>‹</button>
+            )}
+            <div
+              ref={bagianScrollRef}
+              className="bagian-scroll"
+              onScroll={updateScrollState}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}
+            >
+              {bagianList.map(b => (
+                <button
+                  key={b}
+                  className={`act-btn ${filterBagian === b ? 'active' : ''}`}
+                  onClick={() => setFilterBagian(b)}
+                  style={{ flexShrink: 0 }}
+                >{b}</button>
+              ))}
             </div>
-          </div>
+            {scrollState.canRight && (
+              <button onClick={() => geserBagian(1)} title="Geser ke kanan" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26 }}>›</button>
+            )}
+          </>
         )}
+        <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
+        <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
       </div>
-
 
 
       <div className="actions">
