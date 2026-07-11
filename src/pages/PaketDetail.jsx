@@ -461,7 +461,7 @@ async function hapusPdf() {
       `}</style>
       <div className="header-bar" ref={headerBarRef} style={{ flexDirection: 'column', alignItems: 'stretch', height: 64, position: 'relative', gap: 0, marginBottom: 10 }}>
         <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', height: 40, gap: 10 }}>
-          <div className="title" style={{ flexShrink: 0, marginTop: 4 }}>{paket.nama}</div>
+          <div className="title" style={{ flexShrink: 0, height: '100%', display: 'flex', alignItems: 'center' }}>{paket.nama}</div>
           {bagianList.length > 0 && (
             <>
               <button
@@ -486,7 +486,7 @@ async function hapusPdf() {
               </div>
             </>
           )}
-          <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
+          <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10, height: '100%', display: 'flex', alignItems: 'center' }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
           <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
         </div>
 
