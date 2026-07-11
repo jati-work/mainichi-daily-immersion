@@ -104,6 +104,45 @@ export default function PaketDetail({ paketId, goTo }) {
     setScrollBar({ left, width, thumbLeft, thumbWidth, visible: scrollable })
   }
 
+  function handleThumbMouseDown(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    const el = bagianScrollRef.current
+    if (!el) return
+    const startX = e.clientX
+    const startScrollLeft = el.scrollLeft
+    document.body.style.userSelect = 'none'
+    function onMove(ev) {
+      const trackWidth = scrollBar.width
+      const thumbWidth = scrollBar.thumbWidth
+      const scrollableTrack = trackWidth - thumbWidth
+      const maxScroll = el.scrollWidth - el.clientWidth
+      if (scrollableTrack <= 0 || maxScroll <= 0) return
+      const deltaPx = ev.clientX - startX
+      const scrollDelta = (deltaPx / scrollableTrack) * maxScroll
+      el.scrollLeft = Math.min(Math.max(startScrollLeft + scrollDelta, 0), maxScroll)
+    }
+    function onUp() {
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  function handleTrackMouseDown(e) {
+    const el = bagianScrollRef.current
+    if (!el) return
+    const trackRect = e.currentTarget.getBoundingClientRect()
+    const clickX = e.clientX - trackRect.left
+    const targetLeft = clickX - scrollBar.thumbWidth / 2
+    const scrollableTrack = scrollBar.width - scrollBar.thumbWidth
+    const maxScroll = el.scrollWidth - el.clientWidth
+    if (scrollableTrack <= 0) return
+    el.scrollLeft = Math.min(Math.max((targetLeft / scrollableTrack) * maxScroll, 0), maxScroll)
+  }
+
   useEffect(() => {
     updateScrollBarTrack()
     window.addEventListener('resize', updateScrollBarTrack)
@@ -420,8 +459,8 @@ async function hapusPdf() {
         .bagian-scroll::-webkit-scrollbar { height: 0; display: none; }
         .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
-      <div className="header-bar" ref={headerBarRef} style={{ flexWrap: 'nowrap', alignItems: 'center', height: 44, position: 'relative' }}>
-        <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
+      <div className="header-bar" ref={headerBarRef} style={{ flexWrap: 'nowrap', alignItems: 'flex-start', height: 64, position: 'relative', paddingTop: 10 }}>
+        <div className="title" style={{ flexShrink: 0, marginTop: 5 }}>{paket.nama}</div>
         {bagianList.length > 0 && (
           <>
             <button
@@ -446,15 +485,31 @@ async function hapusPdf() {
             </div>
           </>
         )}
-        <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
+        <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10, marginTop: 5 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
         <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
 
         {scrollBar.visible && (
-          <div style={{ position: 'absolute', left: scrollBar.left, width: scrollBar.width, bottom: 2, height: 4, background: '#e8f3e8', borderRadius: 2, pointerEvents: 'none' }}>
-            <div style={{ position: 'absolute', left: scrollBar.thumbLeft, width: scrollBar.thumbWidth, height: 4, background: '#b8d8b8', borderRadius: 2 }} />
+          <div
+            onMouseDown={handleTrackMouseDown}
+            style={{
+              position: 'absolute', left: scrollBar.left, width: scrollBar.width, bottom: 6,
+              height: 14, display: 'flex', alignItems: 'center', cursor: 'pointer',
+            }}
+          >
+            <div style={{ width: '100%', height: 6, background: '#e8f3e8', borderRadius: 3 }}>
+              <div
+                onMouseDown={handleThumbMouseDown}
+                title="Geser buat lihat bagian lainnya"
+                style={{
+                  position: 'relative', left: scrollBar.thumbLeft, width: scrollBar.thumbWidth, height: 14, top: -4,
+                  background: '#b8d8b8', borderRadius: 7, cursor: 'grab',
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
+
 
       <div className="actions">
         <button className={`act-btn ${kartuMode === 'buka' ? 'active' : ''}`} onClick={() => setKartu('buka')}>Buka semua ▾</button>
