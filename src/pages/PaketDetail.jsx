@@ -459,56 +459,59 @@ async function hapusPdf() {
         .bagian-scroll::-webkit-scrollbar { height: 0; display: none; }
         .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
-      <div className="header-bar" ref={headerBarRef} style={{ flexWrap: 'nowrap', alignItems: 'flex-start', height: 64, position: 'relative', paddingTop: 10 }}>
-        <div className="title" style={{ flexShrink: 0, marginTop: 5 }}>{paket.nama}</div>
-        {bagianList.length > 0 && (
-          <>
-            <button
-              className={`act-btn ${filterBagian === 'all' ? 'active' : ''}`}
-              onClick={() => setFilterBagian('all')}
-              style={{ flexShrink: 0 }}
-            >Semua</button>
-            <div
-              ref={bagianScrollRef}
-              className="bagian-scroll"
-              onScroll={updateScrollBarTrack}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}
-            >
-              {bagianList.map(b => (
-                <button
-                  key={b}
-                  className={`act-btn ${filterBagian === b ? 'active' : ''}`}
-                  onClick={() => setFilterBagian(b)}
-                  style={{ flexShrink: 0 }}
-                >{b}</button>
-              ))}
-            </div>
-          </>
-        )}
-        <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10, marginTop: 5 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
-        <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
+      <div className="header-bar" ref={headerBarRef} style={{ flexDirection: 'column', alignItems: 'stretch', height: 60, position: 'relative', gap: 0 }}>
+        <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', height: 40 }}>
+          <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
+          {bagianList.length > 0 && (
+            <>
+              <button
+                className={`act-btn ${filterBagian === 'all' ? 'active' : ''}`}
+                onClick={() => setFilterBagian('all')}
+                style={{ flexShrink: 0 }}
+              >Semua</button>
+              <div
+                ref={bagianScrollRef}
+                className="bagian-scroll"
+                onScroll={updateScrollBarTrack}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}
+              >
+                {bagianList.map(b => (
+                  <button
+                    key={b}
+                    className={`act-btn ${filterBagian === b ? 'active' : ''}`}
+                    onClick={() => setFilterBagian(b)}
+                    style={{ flexShrink: 0 }}
+                  >{b}</button>
+                ))}
+              </div>
+            </>
+          )}
+          <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
+          <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
+        </div>
 
         {scrollBar.visible && (
           <div
             onMouseDown={handleTrackMouseDown}
             style={{
-              position: 'absolute', left: scrollBar.left, width: scrollBar.width, bottom: 6,
-              height: 14, display: 'flex', alignItems: 'center', cursor: 'pointer',
+              position: 'absolute', left: scrollBar.left, width: scrollBar.width, bottom: 8,
+              height: 10, display: 'flex', alignItems: 'center', cursor: 'pointer',
             }}
           >
-            <div style={{ width: '100%', height: 6, background: '#e8f3e8', borderRadius: 3 }}>
+            <div style={{ width: '100%', height: 4, background: '#e8f3e8', borderRadius: 2 }}>
               <div
                 onMouseDown={handleThumbMouseDown}
                 title="Geser buat lihat bagian lainnya"
                 style={{
-                  position: 'relative', left: scrollBar.thumbLeft, width: scrollBar.thumbWidth, height: 14, top: -4,
-                  background: '#b8d8b8', borderRadius: 7, cursor: 'grab',
+                  position: 'relative', left: scrollBar.thumbLeft, width: scrollBar.thumbWidth, height: 10, top: -3,
+                  background: '#b8d8b8', borderRadius: 5, cursor: 'grab',
                 }}
               />
             </div>
           </div>
         )}
       </div>
+
 
 
       <div className="actions">
