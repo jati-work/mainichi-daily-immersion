@@ -392,7 +392,11 @@ async function hapusPdf() {
 
   return (
     <div>
-      <div className="header-bar" style={{ flexWrap: 'nowrap' }}>
+      <style>{`
+        .bagian-scroll::-webkit-scrollbar { height: 0; display: none; }
+        .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+      `}</style>
+      <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center' }}>
         <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
         {bagianList.length > 0 && (
           <>
@@ -401,7 +405,7 @@ async function hapusPdf() {
               onClick={() => setFilterBagian('all')}
               style={{ flexShrink: 0 }}
             >Semua</button>
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}>
+            <div className="bagian-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}>
               {bagianList.map(b => (
                 <button
                   key={b}
