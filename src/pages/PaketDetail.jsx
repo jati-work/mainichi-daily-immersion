@@ -422,7 +422,7 @@ async function hapusPdf() {
       <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center', gap: 10 }}>
         <div className="title" style={{ flexShrink: 0, marginTop: -2 }}>{paket.nama}</div>
         {bagianList.length > 0 && (
-          <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: '1 1 auto' }}>
             <button
               className={`act-btn ${filterBagian === 'all' ? 'active' : ''}`}
               onClick={() => setFilterBagian('all')}
@@ -450,7 +450,7 @@ async function hapusPdf() {
             {scrollState.canRight && (
               <button onClick={() => geserBagian(1)} title="Geser ke kanan" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26 }}>›</button>
             )}
-          </>
+          </div>
         )}
         <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
         <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
