@@ -429,8 +429,6 @@ async function hapusPdf() {
               onClick={() => setFilterBagian('all')}
               style={{ flexShrink: 0 }}
             >Semua</button>
-            <div className="bagian-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, height: '100%' }}>
-              {bagianList.map(b => (
             <div
               ref={bagianScrollRef}
               className="bagian-scroll"
