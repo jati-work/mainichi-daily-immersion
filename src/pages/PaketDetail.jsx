@@ -392,18 +392,29 @@ async function hapusPdf() {
 
   return (
     <div>
-      <div className="header-bar">
-        <div className="title">{paket.nama}</div>
+      <div className="header-bar" style={{ flexWrap: 'nowrap' }}>
+        <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
         {bagianList.length > 0 && (
           <>
-            <button className={`act-btn ${filterBagian === 'all' ? 'active' : ''}`} onClick={() => setFilterBagian('all')}>Semua</button>
-            {bagianList.map(b => (
-              <button key={b} className={`act-btn ${filterBagian === b ? 'active' : ''}`} onClick={() => setFilterBagian(b)}>{b}</button>
-            ))}
+            <button
+              className={`act-btn ${filterBagian === 'all' ? 'active' : ''}`}
+              onClick={() => setFilterBagian('all')}
+              style={{ flexShrink: 0 }}
+            >Semua</button>
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}>
+              {bagianList.map(b => (
+                <button
+                  key={b}
+                  className={`act-btn ${filterBagian === b ? 'active' : ''}`}
+                  onClick={() => setFilterBagian(b)}
+                  style={{ flexShrink: 0 }}
+                >{b}</button>
+              ))}
+            </div>
           </>
         )}
-        <div className="stats">{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
-        <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali">←</button>
+        <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
+        <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
       </div>
 
       <div className="actions">
