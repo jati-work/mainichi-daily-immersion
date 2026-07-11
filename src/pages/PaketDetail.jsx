@@ -461,7 +461,7 @@ async function hapusPdf() {
       `}</style>
       <div className="header-bar" ref={headerBarRef} style={{ flexDirection: 'column', alignItems: 'stretch', height: 64, position: 'relative', gap: 0, marginBottom: 10 }}>
         <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', height: 40, gap: 10 }}>
-          <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
+          <div className="title" style={{ flexShrink: 0, marginTop: 4 }}>{paket.nama}</div>
           {bagianList.length > 0 && (
             <>
               <button
