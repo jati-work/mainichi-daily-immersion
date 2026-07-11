@@ -459,8 +459,8 @@ async function hapusPdf() {
         .bagian-scroll::-webkit-scrollbar { height: 0; display: none; }
         .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
-      <div className="header-bar" ref={headerBarRef} style={{ flexDirection: 'column', alignItems: 'stretch', height: 60, position: 'relative', gap: 0 }}>
-        <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', height: 40 }}>
+      <div className="header-bar" ref={headerBarRef} style={{ flexDirection: 'column', alignItems: 'stretch', height: 64, position: 'relative', gap: 0, marginBottom: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'center', height: 40, gap: 10 }}>
           <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
           {bagianList.length > 0 && (
             <>
