@@ -32,6 +32,9 @@ export default function PaketDetail({ paketId, goTo }) {
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const jpInputRef = useRef(null)
+  const headerBarRef = useRef(null)
+  const bagianScrollRef = useRef(null)
+  const [scrollBar, setScrollBar] = useState({ left: 0, width: 0, thumbLeft: 0, thumbWidth: 0, visible: false })
   const [showPdf, setShowPdf] = useState(false)
   const [showDiary, setShowDiary] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -85,6 +88,27 @@ export default function PaketDetail({ paketId, goTo }) {
   useEffect(() => { muatSemua(); cekIsiDiary() }, [paketId])
 
   const bagianList = paket?.bagian_list || []
+
+  function updateScrollBarTrack() {
+    const el = bagianScrollRef.current
+    const bar = headerBarRef.current
+    if (!el || !bar) { setScrollBar(s => ({ ...s, visible: false })); return }
+    const elRect = el.getBoundingClientRect()
+    const barRect = bar.getBoundingClientRect()
+    const left = elRect.left - barRect.left
+    const width = elRect.width
+    const scrollable = el.scrollWidth > el.clientWidth + 1
+    const thumbWidth = scrollable ? Math.max((el.clientWidth / el.scrollWidth) * width, 24) : width
+    const maxScroll = el.scrollWidth - el.clientWidth
+    const thumbLeft = scrollable && maxScroll > 0 ? (el.scrollLeft / maxScroll) * (width - thumbWidth) : 0
+    setScrollBar({ left, width, thumbLeft, thumbWidth, visible: scrollable })
+  }
+
+  useEffect(() => {
+    updateScrollBarTrack()
+    window.addEventListener('resize', updateScrollBarTrack)
+    return () => window.removeEventListener('resize', updateScrollBarTrack)
+  }, [bagianList])
 
   function toggleFlip(id) {
     const next = new Set(flipped)
@@ -393,13 +417,10 @@ async function hapusPdf() {
   return (
     <div>
       <style>{`
-        .bagian-scroll::-webkit-scrollbar { height: 6px; }
-        .bagian-scroll::-webkit-scrollbar-track { background: transparent; }
-        .bagian-scroll::-webkit-scrollbar-thumb { background: #b8d8b8; border-radius: 3px; }
-        .bagian-scroll::-webkit-scrollbar-thumb:hover { background: #9ac9a0; }
-        .bagian-scroll { scrollbar-width: thin; scrollbar-color: #b8d8b8 transparent; scrollbar-gutter: stable; }
+        .bagian-scroll::-webkit-scrollbar { height: 0; display: none; }
+        .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
-      <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center', height: 52 }}>
+      <div className="header-bar" ref={headerBarRef} style={{ flexWrap: 'nowrap', alignItems: 'center', height: 44, position: 'relative' }}>
         <div className="title" style={{ flexShrink: 0 }}>{paket.nama}</div>
         {bagianList.length > 0 && (
           <>
@@ -409,6 +430,13 @@ async function hapusPdf() {
               style={{ flexShrink: 0 }}
             >Semua</button>
             <div className="bagian-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, height: '100%' }}>
+              {bagianList.map(b => (
+            <div
+              ref={bagianScrollRef}
+              className="bagian-scroll"
+              onScroll={updateScrollBarTrack}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0 }}
+            >
               {bagianList.map(b => (
                 <button
                   key={b}
@@ -422,6 +450,12 @@ async function hapusPdf() {
         )}
         <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
         <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
+
+        {scrollBar.visible && (
+          <div style={{ position: 'absolute', left: scrollBar.left, width: scrollBar.width, bottom: 2, height: 4, background: '#e8f3e8', borderRadius: 2, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', left: scrollBar.thumbLeft, width: scrollBar.thumbWidth, height: 4, background: '#b8d8b8', borderRadius: 2 }} />
+          </div>
+        )}
       </div>
 
       <div className="actions">
