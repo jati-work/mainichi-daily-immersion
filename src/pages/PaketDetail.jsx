@@ -32,6 +32,7 @@ function Kartu({
   return (
     <div
       className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
+      data-pindah-item
       draggable={pindahMode}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -104,14 +105,12 @@ export default function PaketDetail({ paketId, goTo }) {
       setShowMenu(false)
       setShowTesBawah(false)
     }
-    if (!e.target.closest('[data-form-area]') && !e.target.closest('.card') && !e.target.closest('.modal-overlay')) {
+    if (!e.target.closest('[data-form-area]') && !e.target.closest('.card') && !e.target.closest('.modal-overlay') && !e.target.closest('[data-pindah-item]')) {
       batalForm()
       setEditMode(false)
       setHapusMode(false)
       setPindahMode(false)
       setPindahBagianMode(false)
-      setDraggingId(null); setDragOverId(null)
-      setDraggingBagian(null); setDragOverBagian(null)
     }
   }
   document.addEventListener('mousedown', handleClickOutside)
@@ -556,6 +555,7 @@ async function hapusPdf() {
                 <button
                   key={b}
                   className={`act-btn ${filterBagian === b ? 'active' : ''}`}
+                  data-pindah-item
                   onClick={() => { if (!pindahBagianMode) setFilterBagian(b) }}
                   draggable={pindahBagianMode}
                   onDragStart={e => { setDraggingBagian(b); e.dataTransfer.effectAllowed = 'move' }}
