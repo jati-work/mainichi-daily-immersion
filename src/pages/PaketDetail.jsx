@@ -49,6 +49,12 @@ export default function PaketDetail({ paketId, goTo }) {
   const [kartuMode, setKartuMode] = useState(null) // 'buka' | 'tutup' | null
   const [editMode, setEditMode] = useState(false)
   const [hapusMode, setHapusMode] = useState(false)
+  const [pindahMode, setPindahMode] = useState(false)
+  const [draggingId, setDraggingId] = useState(null)
+  const [dragOverId, setDragOverId] = useState(null)
+  const [pindahBagianMode, setPindahBagianMode] = useState(false)
+  const [draggingBagian, setDraggingBagian] = useState(null)
+  const [dragOverBagian, setDragOverBagian] = useState(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showTesBawah, setShowTesBawah] = useState(false)
 
@@ -144,7 +150,7 @@ export default function PaketDetail({ paketId, goTo }) {
     } else {
       const { error } = await supabase.from('kata').insert({
         paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
-        contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
+        contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(), urutan: Date.now(),
       })
       if (error) { alert('Gagal simpan: ' + error.message); return }
     }
@@ -255,6 +261,7 @@ export default function PaketDetail({ paketId, goTo }) {
   function klikKartu(k) {
     if (hapusMode) hapusKata(k)
     else if (editMode) mulaiEditKata(k)
+    else if (pindahMode) { /* nggak ngapa-ngapain, drag-drop yang jalan */ }
     else toggleFlip(k.id)
   }
 
@@ -275,7 +282,7 @@ export default function PaketDetail({ paketId, goTo }) {
   function toggleEditMode() {
     setEditMode(e => {
       const next = !e
-      if (next) { setHapusMode(false); setTes(null); setShowPdf(false); batalForm() }
+      if (next) { setHapusMode(false); setPindahMode(false); setPindahBagianMode(false); setTes(null); setShowPdf(false); batalForm() }
       else if (editingId) batalForm()
       return next
     })
@@ -283,9 +290,65 @@ export default function PaketDetail({ paketId, goTo }) {
   function toggleHapusMode() {
     setHapusMode(h => {
       const next = !h
-      if (next) { setEditMode(false); setTes(null); setShowPdf(false); batalForm() }
+      if (next) { setEditMode(false); setPindahMode(false); setPindahBagianMode(false); setTes(null); setShowPdf(false); batalForm() }
       return next
     })
+  }
+  function togglePindahMode() {
+    setPindahMode(p => {
+      const next = !p
+      if (next) { setEditMode(false); setHapusMode(false); setPindahBagianMode(false); setTes(null); setShowPdf(false); batalForm() }
+      else { setDraggingId(null); setDragOverId(null) }
+      return next
+    })
+  }
+  function togglePindahBagianMode() {
+    setPindahBagianMode(p => {
+      const next = !p
+      if (next) { setEditMode(false); setHapusMode(false); setPindahMode(false); setTes(null); setShowPdf(false); batalForm() }
+      else { setDraggingBagian(null); setDragOverBagian(null) }
+      return next
+    })
+  }
+
+  async function pindahBagian(namaDrag, namaTarget) {
+    if (namaDrag === namaTarget) return
+    const list = [...bagianList]
+    const dariIdx = list.indexOf(namaDrag)
+    const keIdx = namaTarget ? list.indexOf(namaTarget) : list.length
+    if (dariIdx === -1) return
+    list.splice(dariIdx, 1)
+    const idxSetelahHapus = namaTarget ? list.indexOf(namaTarget) : list.length
+    list.splice(idxSetelahHapus, 0, namaDrag)
+    setPaket(p => ({ ...p, bagian_list: list }))
+    const { error } = await supabase.from('paket').update({ bagian_list: list }).eq('id', paketId)
+    if (error) { alert('Gagal ngatur urutan bagian: ' + error.message); muatSemua() }
+  }
+
+  // urutan efektif: pakai kolom urutan kalau ada, kalau belum pernah
+  // di-drag (masih null dari data lama) fallback ke waktu dibuat
+  function urutanEfektif(k) {
+    return k.urutan ?? new Date(k.created_at).getTime()
+  }
+
+  // pindahin kata ke bagian & posisi baru (drop di atas kata lain = sisip
+  // sebelum kata itu; drop di area kosong bagian = taruh di akhir bagian)
+  async function pindahKata(draggedId, targetBagian, targetId) {
+    if (draggedId === targetId) return
+    const dragged = kataList.find(k => k.id === draggedId)
+    if (!dragged) return
+    const items = kataList
+      .filter(k => k.bagian === targetBagian && k.id !== draggedId)
+      .sort((a, b) => urutanEfektif(a) - urutanEfektif(b))
+    const targetIndex = targetId ? items.findIndex(k => k.id === targetId) : items.length
+    const before = items[targetIndex - 1]
+    const after = targetId ? items[targetIndex] : undefined
+    const beforeU = before ? urutanEfektif(before) : (after ? urutanEfektif(after) - 1000 : Date.now())
+    const afterU = after ? urutanEfektif(after) : beforeU + 1000
+    const newUrutan = (beforeU + afterU) / 2
+    setKataList(list => list.map(k => (k.id === draggedId ? { ...k, bagian: targetBagian, urutan: newUrutan } : k)))
+    const { error } = await supabase.from('kata').update({ bagian: targetBagian, urutan: newUrutan }).eq('id', draggedId)
+    if (error) { alert('Gagal pindahin kata: ' + error.message); muatSemua() }
   }
 
   const displayList = useMemo(() => {
@@ -294,6 +357,7 @@ export default function PaketDetail({ paketId, goTo }) {
     if (sembunyikan) list = list.filter(k => !k.hafal)
     if (tampilkanHafal) list = list.filter(k => k.hafal)
     if (random) list = [...list].sort((a, b) => (randomOrder.get(a.id) ?? 0) - (randomOrder.get(b.id) ?? 0))
+    else list = [...list].sort((a, b) => urutanEfektif(a) - urutanEfektif(b))
     return list
   }, [kataList, filterBagian, sembunyikan, tampilkanHafal, random, randomOrder])
 
@@ -307,11 +371,29 @@ export default function PaketDetail({ paketId, goTo }) {
 
   function Kartu({ k }) {
     const isFlipped = flipped.has(k.id)
+    const isDragging = draggingId === k.id
+    const isDragOver = pindahMode && dragOverId === k.id && draggingId !== k.id
     return (
-      <div className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}>
+      <div
+        className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
+        draggable={pindahMode}
+        onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
+        onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
+        onDragOver={e => { if (pindahMode) { e.preventDefault(); setDragOverId(k.id) } }}
+        onDragLeave={() => setDragOverId(id => (id === k.id ? null : id))}
+        onDrop={e => {
+          e.preventDefault()
+          if (pindahMode && draggingId) pindahKata(draggingId, k.bagian || '', k.id)
+          setDraggingId(null); setDragOverId(null)
+        }}
+        style={{ opacity: isDragging ? 0.4 : 1 }}
+      >
         <div
           className="card-inner" onClick={() => klikKartu(k)}
-          style={{ boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : 'none' }}
+          style={{
+            boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : isDragOver ? '0 0 0 2px #4a90d9' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
+            cursor: pindahMode ? 'grab' : undefined,
+          }}
         >
           <div className="card-front">
             <div>{k.jp}</div>
@@ -442,8 +524,23 @@ async function hapusPdf() {
                 <button
                   key={b}
                   className={`act-btn ${filterBagian === b ? 'active' : ''}`}
-                  onClick={() => setFilterBagian(b)}
-                  style={{ flexShrink: 0 }}
+                  onClick={() => { if (!pindahBagianMode) setFilterBagian(b) }}
+                  draggable={pindahBagianMode}
+                  onDragStart={e => { setDraggingBagian(b); e.dataTransfer.effectAllowed = 'move' }}
+                  onDragEnd={() => { setDraggingBagian(null); setDragOverBagian(null) }}
+                  onDragOver={e => { if (pindahBagianMode) { e.preventDefault(); setDragOverBagian(b) } }}
+                  onDragLeave={() => setDragOverBagian(cur => (cur === b ? null : cur))}
+                  onDrop={e => {
+                    e.preventDefault()
+                    if (pindahBagianMode && draggingBagian) pindahBagian(draggingBagian, b)
+                    setDraggingBagian(null); setDragOverBagian(null)
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    opacity: draggingBagian === b ? 0.4 : 1,
+                    boxShadow: pindahBagianMode && dragOverBagian === b && draggingBagian !== b ? '0 0 0 2px #4a90d9' : pindahBagianMode ? '0 0 0 1.5px #cbb8e8' : undefined,
+                    cursor: pindahBagianMode ? 'grab' : undefined,
+                  }}
                 >{b}</button>
               ))}
             </div>
@@ -495,6 +592,8 @@ async function hapusPdf() {
               <button className="act-btn" style={{ textAlign: 'left', color: '#c0392b' }} onClick={() => { hapusBagian(); setShowMenu(false) }}>🗑️ Hapus Bagian</button>
               <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
               <button className={`act-btn ${editMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { toggleEditMode(); setShowMenu(false) }}>✏️ Edit Kata</button>
+              <button className={`act-btn ${pindahMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { togglePindahMode(); setShowMenu(false) }}>🔀 Pindah Kata</button>
+              <button className={`act-btn ${pindahBagianMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { togglePindahBagianMode(); setShowMenu(false) }}>🔀 Pindah Bagian</button>
               <button className={`act-btn ${hapusMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { toggleHapusMode(); setShowMenu(false) }}>🗑️ Hapus Kata</button>
               <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
               <button className="act-btn" style={{ textAlign: 'left', color: '#c0392b' }} onClick={() => { resetHafalan(); setShowMenu(false) }}>↺ Reset Hafalan</button>
@@ -538,14 +637,23 @@ async function hapusPdf() {
 
       <div className="grid-wrap">
         {!groupedView && (
-          <div className="card-grid">
+          <div
+            className="card-grid"
+            onDragOver={e => { if (pindahMode) e.preventDefault() }}
+            onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, filterBagian !== 'all' ? filterBagian : '', null); setDraggingId(null); setDragOverId(null) }}
+          >
             {displayList.map(k => <Kartu key={k.id} k={k} />)}
           </div>
         )}
         {groupedView && (
           <>
             {displayList.filter(k => !k.bagian).length > 0 && (
-              <div className="card-grid" style={{ marginBottom: 10 }}>
+              <div
+                className="card-grid"
+                style={{ marginBottom: 10 }}
+                onDragOver={e => { if (pindahMode) e.preventDefault() }}
+                onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, '', null); setDraggingId(null); setDragOverId(null) }}
+              >
                 {displayList.filter(k => !k.bagian).map(k => <Kartu key={k.id} k={k} />)}
               </div>
             )}
@@ -555,7 +663,11 @@ async function hapusPdf() {
               return (
                 <div key={b} style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#7aaa8a', padding: '8px 4px 4px' }}>{b}</div>
-                  <div className="card-grid">
+                  <div
+                    className="card-grid"
+                    onDragOver={e => { if (pindahMode) e.preventDefault() }}
+                    onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, b, null); setDraggingId(null); setDragOverId(null) }}
+                  >
                     {items.map(k => <Kartu key={k.id} k={k} />)}
                   </div>
                 </div>
