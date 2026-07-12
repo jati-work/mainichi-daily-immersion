@@ -323,10 +323,11 @@ export default function PaketDetail({ paketId, goTo }) {
         onToggleHafal={toggleHafal}
         onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
-        onDragOver={e => { if (pindahMode) { e.preventDefault(); setDragOverId(k.id) } }}
+        onDragOver={e => { if (pindahMode) { e.preventDefault(); e.stopPropagation(); setDragOverId(k.id) } }}
         onDragLeave={() => setDragOverId(id => (id === k.id ? null : id))}
         onDrop={e => {
           e.preventDefault()
+          e.stopPropagation()
           if (pindahMode && draggingId) pindahKata(draggingId, k.bagian || '', k.id)
           setDraggingId(null); setDragOverId(null)
         }}
