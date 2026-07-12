@@ -108,6 +108,10 @@ export default function PaketDetail({ paketId, goTo }) {
       batalForm()
       setEditMode(false)
       setHapusMode(false)
+      setPindahMode(false)
+      setPindahBagianMode(false)
+      setDraggingId(null); setDragOverId(null)
+      setDraggingBagian(null); setDragOverBagian(null)
     }
   }
   document.addEventListener('mousedown', handleClickOutside)
