@@ -26,7 +26,7 @@ function shuffle(arr) {
 // <Kartu> itu "komponen baru", jadi semua kartu ke-remount di tengah
 // proses drag -> browser otomatis batalin drag yang lagi jalan.
 function Kartu({
-  k, isFlipped, isDragging, isDragOver, pindahMode, editMode, hapusMode,
+  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
   return (
@@ -39,12 +39,16 @@ function Kartu({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      style={{ opacity: isDragging ? 0.4 : 1 }}
+      style={{
+        opacity: isDragging ? 0.4 : 1,
+        borderLeft: isDragOver && dragOverPos === 'before' ? '3px solid #4a90d9' : '3px solid transparent',
+        borderRight: isDragOver && dragOverPos === 'after' ? '3px solid #4a90d9' : '3px solid transparent',
+      }}
     >
       <div
         className="card-inner" onClick={onClick}
         style={{
-          boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : isDragOver ? '0 0 0 2px #4a90d9' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
+          boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
           cursor: pindahMode ? 'grab' : undefined,
         }}
       >
@@ -93,6 +97,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [pindahMode, setPindahMode] = useState(false)
   const [draggingId, setDraggingId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
+  const [dragOverPos, setDragOverPos] = useState('before')
   const [pindahBagianMode, setPindahBagianMode] = useState(false)
   const [draggingBagian, setDraggingBagian] = useState(null)
   const [dragOverBagian, setDragOverBagian] = useState(null)
@@ -316,6 +321,7 @@ export default function PaketDetail({ paketId, goTo }) {
         isFlipped={flipped.has(k.id)}
         isDragging={draggingId === k.id}
         isDragOver={pindahMode && dragOverId === k.id && draggingId !== k.id}
+        dragOverPos={dragOverPos}
         pindahMode={pindahMode}
         editMode={editMode}
         hapusMode={hapusMode}
@@ -323,12 +329,19 @@ export default function PaketDetail({ paketId, goTo }) {
         onToggleHafal={toggleHafal}
         onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
-        onDragOver={e => { if (pindahMode) { e.preventDefault(); e.stopPropagation(); setDragOverId(k.id) } }}
+        onDragOver={e => {
+          if (pindahMode) {
+            e.preventDefault(); e.stopPropagation()
+            const rect = e.currentTarget.getBoundingClientRect()
+            const posisi = (e.clientX - rect.left) > rect.width / 2 ? 'after' : 'before'
+            setDragOverId(k.id); setDragOverPos(posisi)
+          }
+        }}
         onDragLeave={() => setDragOverId(id => (id === k.id ? null : id))}
         onDrop={e => {
           e.preventDefault()
           e.stopPropagation()
-          if (pindahMode && draggingId) pindahKata(draggingId, k.bagian || '', k.id)
+          if (pindahMode && draggingId) pindahKata(draggingId, k.bagian || '', k.id, dragOverPos)
           setDraggingId(null); setDragOverId(null)
         }}
       />
@@ -403,16 +416,25 @@ export default function PaketDetail({ paketId, goTo }) {
 
   // pindahin kata ke bagian & posisi baru (drop di atas kata lain = sisip
   // sebelum kata itu; drop di area kosong bagian = taruh di akhir bagian)
-  async function pindahKata(draggedId, targetBagian, targetId) {
+  async function pindahKata(draggedId, targetBagian, targetId, posisi = 'before') {
     if (draggedId === targetId) return
     const dragged = kataList.find(k => k.id === draggedId)
     if (!dragged) return
     const items = kataList
       .filter(k => k.bagian === targetBagian && k.id !== draggedId)
       .sort((a, b) => urutanEfektif(a) - urutanEfektif(b))
-    const targetIndex = targetId ? items.findIndex(k => k.id === targetId) : items.length
+    let targetIndex
+    if (!targetId) {
+      targetIndex = items.length // drop di area kosong -> taruh di akhir bagian
+    } else {
+      const idx = items.findIndex(k => k.id === targetId)
+      // 'after' penting buat gerak ke KANAN -> kalau cuma "sisip sebelum
+      // target" doang, mindahin ke tetangga kanan langsung nggak akan
+      // kelihatan efeknya (balik lagi ke posisi semula)
+      targetIndex = posisi === 'after' ? idx + 1 : idx
+    }
     const before = items[targetIndex - 1]
-    const after = targetId ? items[targetIndex] : undefined
+    const after = items[targetIndex]
     const beforeU = before ? urutanEfektif(before) : (after ? urutanEfektif(after) - 1000 : Date.now())
     const afterU = after ? urutanEfektif(after) : beforeU + 1000
     const newUrutan = (beforeU + afterU) / 2
