@@ -19,6 +19,46 @@ function shuffle(arr) {
   return a
 }
 
+// Kartu didefinisiin di LUAR komponen utama (bukan di dalam PaketDetail)
+// dan sengaja bukan sekadar fungsi biasa yang dibikin ulang tiap render.
+// Kalau didefinisiin di dalam, tiap kali dragOverId/draggingId berubah
+// (yaitu tiap event dragover, bisa puluhan kali per detik) React nganggep
+// <Kartu> itu "komponen baru", jadi semua kartu ke-remount di tengah
+// proses drag -> browser otomatis batalin drag yang lagi jalan.
+function Kartu({
+  k, isFlipped, isDragging, isDragOver, pindahMode, editMode, hapusMode,
+  onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
+}) {
+  return (
+    <div
+      className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
+      draggable={pindahMode}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+    >
+      <div
+        className="card-inner" onClick={onClick}
+        style={{
+          boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : isDragOver ? '0 0 0 2px #4a90d9' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
+          cursor: pindahMode ? 'grab' : undefined,
+        }}
+      >
+        <div className="card-front">
+          <div>{k.jp}</div>
+        </div>
+        <div className="card-back">
+          <div>{k.arti}</div>
+        </div>
+      </div>
+      <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
+    </div>
+  )
+}
+
 export default function PaketDetail({ paketId, goTo }) {
   const [paket, setPaket] = useState(null)
   const [kataList, setKataList] = useState([])
@@ -265,6 +305,32 @@ export default function PaketDetail({ paketId, goTo }) {
     else toggleFlip(k.id)
   }
 
+  function renderKartu(k) {
+    return (
+      <Kartu
+        key={k.id}
+        k={k}
+        isFlipped={flipped.has(k.id)}
+        isDragging={draggingId === k.id}
+        isDragOver={pindahMode && dragOverId === k.id && draggingId !== k.id}
+        pindahMode={pindahMode}
+        editMode={editMode}
+        hapusMode={hapusMode}
+        onClick={() => klikKartu(k)}
+        onToggleHafal={toggleHafal}
+        onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
+        onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
+        onDragOver={e => { if (pindahMode) { e.preventDefault(); setDragOverId(k.id) } }}
+        onDragLeave={() => setDragOverId(id => (id === k.id ? null : id))}
+        onDrop={e => {
+          e.preventDefault()
+          if (pindahMode && draggingId) pindahKata(draggingId, k.bagian || '', k.id)
+          setDraggingId(null); setDragOverId(null)
+        }}
+      />
+    )
+  }
+
   function toggleRandom() {
     if (!random) {
       const map = new Map()
@@ -368,44 +434,6 @@ export default function PaketDetail({ paketId, goTo }) {
   }
 
   const groupedView = filterBagian === 'all' && bagianList.length > 0
-
-  function Kartu({ k }) {
-    const isFlipped = flipped.has(k.id)
-    const isDragging = draggingId === k.id
-    const isDragOver = pindahMode && dragOverId === k.id && draggingId !== k.id
-    return (
-      <div
-        className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
-        draggable={pindahMode}
-        onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
-        onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
-        onDragOver={e => { if (pindahMode) { e.preventDefault(); setDragOverId(k.id) } }}
-        onDragLeave={() => setDragOverId(id => (id === k.id ? null : id))}
-        onDrop={e => {
-          e.preventDefault()
-          if (pindahMode && draggingId) pindahKata(draggingId, k.bagian || '', k.id)
-          setDraggingId(null); setDragOverId(null)
-        }}
-        style={{ opacity: isDragging ? 0.4 : 1 }}
-      >
-        <div
-          className="card-inner" onClick={() => klikKartu(k)}
-          style={{
-            boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : isDragOver ? '0 0 0 2px #4a90d9' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
-            cursor: pindahMode ? 'grab' : undefined,
-          }}
-        >
-          <div className="card-front">
-            <div>{k.jp}</div>
-          </div>
-          <div className="card-back">
-            <div>{k.arti}</div>
-          </div>
-        </div>
-        <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); toggleHafal(k) }}>✓</button>
-      </div>
-    )
-  }
 
   async function bukaPdf() {
     tutupPanelLain()
@@ -589,11 +617,11 @@ async function hapusPdf() {
               boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 20, minWidth: 160,
             }}>
               <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { editBagian(); setShowMenu(false) }}>✏️ Edit Bagian</button>
+              <button className={`act-btn ${pindahBagianMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { togglePindahBagianMode(); setShowMenu(false) }}>🔀 Pindah Bagian</button>
               <button className="act-btn" style={{ textAlign: 'left', color: '#c0392b' }} onClick={() => { hapusBagian(); setShowMenu(false) }}>🗑️ Hapus Bagian</button>
               <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
               <button className={`act-btn ${editMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { toggleEditMode(); setShowMenu(false) }}>✏️ Edit Kata</button>
               <button className={`act-btn ${pindahMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { togglePindahMode(); setShowMenu(false) }}>🔀 Pindah Kata</button>
-              <button className={`act-btn ${pindahBagianMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { togglePindahBagianMode(); setShowMenu(false) }}>🔀 Pindah Bagian</button>
               <button className={`act-btn ${hapusMode ? 'active' : ''}`} style={{ textAlign: 'left' }} onClick={() => { toggleHapusMode(); setShowMenu(false) }}>🗑️ Hapus Kata</button>
               <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
               <button className="act-btn" style={{ textAlign: 'left', color: '#c0392b' }} onClick={() => { resetHafalan(); setShowMenu(false) }}>↺ Reset Hafalan</button>
@@ -642,7 +670,7 @@ async function hapusPdf() {
             onDragOver={e => { if (pindahMode) e.preventDefault() }}
             onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, filterBagian !== 'all' ? filterBagian : '', null); setDraggingId(null); setDragOverId(null) }}
           >
-            {displayList.map(k => <Kartu key={k.id} k={k} />)}
+            {displayList.map(k => renderKartu(k))}
           </div>
         )}
         {groupedView && (
@@ -654,7 +682,7 @@ async function hapusPdf() {
                 onDragOver={e => { if (pindahMode) e.preventDefault() }}
                 onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, '', null); setDraggingId(null); setDragOverId(null) }}
               >
-                {displayList.filter(k => !k.bagian).map(k => <Kartu key={k.id} k={k} />)}
+                {displayList.filter(k => !k.bagian).map(k => renderKartu(k))}
               </div>
             )}
             {bagianList.map(b => {
@@ -668,7 +696,7 @@ async function hapusPdf() {
                     onDragOver={e => { if (pindahMode) e.preventDefault() }}
                     onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, b, null); setDraggingId(null); setDragOverId(null) }}
                   >
-                    {items.map(k => <Kartu key={k.id} k={k} />)}
+                    {items.map(k => renderKartu(k))}
                   </div>
                 </div>
               )
