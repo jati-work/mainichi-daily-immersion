@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../supabaseClient'
+import { supabase, supabaseStorage } from '../supabaseClient'
 import PdfHighlighter from './PdfHighlighter'
 import DiaryHalaman from './DiaryHalaman'
 import RadicalPicker from './RadicalPicker'
@@ -133,6 +133,25 @@ export default function PaketDetail({ paketId, goTo }) {
     setPaket(p)
     const { data: k } = await supabase.from('kata').select('*').eq('paket_id', paketId).order('created_at')
     setKataList(k || [])
+  }
+
+  // ---------- nentuin PDF paket ini masuk storage kiri (lama) atau kanan (baru) ----------
+  // kalau paket-nya nempel langsung di root (folder_id null), pake kolom-nya sendiri.
+  // kalau di dalem sub-folder, naik terus sampe ketemu folder paling atas (root),
+  // terus pake kolom folder root itu -- biar semua sub-folder & paket di dalemnya
+  // otomatis ngikut tanpa perlu di-set manual satu-satu.
+  async function tentukanSisiStorage(paketRow) {
+    if (!paketRow?.folder_id) return paketRow?.kolom || 'kiri'
+    const { data: allFolders } = await supabase.from('folders').select('id, parent_id, kolom')
+    if (!allFolders) return 'kiri'
+    let cur = allFolders.find(f => f.id === paketRow.folder_id)
+    while (cur && cur.parent_id) {
+      cur = allFolders.find(f => f.id === cur.parent_id)
+    }
+    return cur?.kolom || 'kiri'
+  }
+  function clientStorageUntuk(sisi) {
+    return sisi === 'kanan' ? supabaseStorage : supabase
   }
   async function cekIsiDiary() {
     const { data } = await supabase.from('diary_pages').select('isi_teks').eq('paket_id', paketId)
@@ -464,7 +483,8 @@ export default function PaketDetail({ paketId, goTo }) {
   async function bukaPdf() {
     tutupPanelLain()
     if (!paket?.pdf_path) { setShowPdf(true); return }
-    const { data, error } = await supabase.storage.from('immersion-pdfs').createSignedUrl(paket.pdf_path, 3600)
+    const sisi = await tentukanSisiStorage(paket)
+    const { data, error } = await clientStorageUntuk(sisi).storage.from('immersion-pdfs').createSignedUrl(paket.pdf_path, 3600)
     if (error) { alert('Gagal ambil PDF: ' + error.message); return }
     setPdfUrl(data.signedUrl)
     setShowPdf(true)
@@ -474,12 +494,14 @@ export default function PaketDetail({ paketId, goTo }) {
     if (!file) return
     if (file.type !== 'application/pdf') { alert('File harus PDF ya!'); return }
     setUploading(true)
+    const sisi = await tentukanSisiStorage(paket)
+    const client = clientStorageUntuk(sisi)
     const path = `${paketId}-${Date.now()}.pdf`
-    const { error: upErr } = await supabase.storage.from('immersion-pdfs').upload(path, file, { upsert: true })
+    const { error: upErr } = await client.storage.from('immersion-pdfs').upload(path, file, { upsert: true })
     if (upErr) { alert('Gagal upload: ' + upErr.message); setUploading(false); return }
     const { error: updErr } = await supabase.from('paket').update({ pdf_path: path }).eq('id', paketId)
     if (updErr) { alert('Gagal nyimpen path PDF: ' + updErr.message); setUploading(false); return }
-    const { data: signed, error: signErr } = await supabase.storage.from('immersion-pdfs').createSignedUrl(path, 3600)
+    const { data: signed, error: signErr } = await client.storage.from('immersion-pdfs').createSignedUrl(path, 3600)
     setUploading(false)
     if (signErr) { alert('Upload sukses, tapi gagal nampilin PDF-nya: ' + signErr.message); muatSemua(); return }
     setPdfUrl(signed.signedUrl)
@@ -487,7 +509,10 @@ export default function PaketDetail({ paketId, goTo }) {
     muatSemua()
   }
 async function hapusPdf() {
-  if (paket.pdf_path) await supabase.storage.from('immersion-pdfs').remove([paket.pdf_path])
+  if (paket.pdf_path) {
+    const sisi = await tentukanSisiStorage(paket)
+    await clientStorageUntuk(sisi).storage.from('immersion-pdfs').remove([paket.pdf_path])
+  }
   await supabase.from('paket').update({ pdf_path: null }).eq('id', paketId)
   setShowPdf(false)
   muatSemua()
