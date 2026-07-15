@@ -9,6 +9,8 @@ export default function PaketList({ goTo, openPaket }) {
   const [loading, setLoading] = useState(true)
   const [exportLoading, setExportLoading] = useState(false)
   const [movePicker, setMovePicker] = useState(null) // { type: 'folder'|'paket', item }
+  const [kamusHasil, setKamusHasil] = useState([])
+  const [kamusLoading, setKamusLoading] = useState(false)
 
   async function muatData() {
     setLoading(true)
@@ -31,6 +33,23 @@ export default function PaketList({ goTo, openPaket }) {
   }
 
   useEffect(() => { muatData() }, [])
+
+  // ----- kamus: cari kata (kanji/kana atau arti) di semua paket -----
+  useEffect(() => {
+    const term = search.trim()
+    if (!term) { setKamusHasil([]); setKamusLoading(false); return }
+    setKamusLoading(true)
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from('kata')
+        .select('id, jp, arti, paket:paket_id (id, nama)')
+        .or(`jp.ilike.%${term}%,arti.ilike.%${term}%`)
+        .limit(50)
+      if (!error) setKamusHasil(data || [])
+      setKamusLoading(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   // ---------- helper: struktur folder ----------
   function anakFolder(parentId) {
@@ -282,8 +301,11 @@ export default function PaketList({ goTo, openPaket }) {
   const itemsIni = useMemo(() => itemsGabungan(currentFolderId), [subfolderIni, paketIni])
   const jejak = useMemo(() => jejakBreadcrumb(currentFolderId), [folders, currentFolderId])
 
-  const term = search.trim().toLowerCase()
-  const hasilSearch = term ? paketList.filter(p => p.nama.toLowerCase().includes(term)) : null
+  const term = search.trim()
+  const namaPaketDitemukan = useMemo(() => {
+    const set = new Set(kamusHasil.map(k => k.paket?.nama).filter(Boolean))
+    return [...set]
+  }, [kamusHasil])
 
   function RowFolder({ f, idx }) {
     const isiFolder = anakFolder(f.id).length
@@ -422,7 +444,7 @@ export default function PaketList({ goTo, openPaket }) {
         </div>
 
         <input
-          className="input-search" placeholder="🔍 Cari nama paket..."
+          className="input-search" placeholder="🔍 Cari kata (kanji/kana atau artinya)..."
           value={search} onChange={e => setSearch(e.target.value)}
         />
 
@@ -430,11 +452,12 @@ export default function PaketList({ goTo, openPaket }) {
 
         {!loading && !term && (
           <>
-            <Breadcrumb />
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <button className="btn-dashed" style={{ flex: 1 }} onClick={tambahFolder}>＋ Folder baru</button>
-              <button className="btn-dashed" style={{ flex: 1 }} onClick={tambahPaketDiFolder}>＋ Paket baru</button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+              <Breadcrumb />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="icon-btn" title="Folder baru" onClick={tambahFolder} style={{ width: 40, height: 32, fontSize: 13 }}>＋📁</button>
+                <button className="icon-btn" title="Paket baru" onClick={tambahPaketDiFolder} style={{ width: 40, height: 32, fontSize: 13 }}>＋📚</button>
+              </div>
             </div>
 
             {subfolderIni.length === 0 && paketIni.length === 0 && (
@@ -451,12 +474,41 @@ export default function PaketList({ goTo, openPaket }) {
           </>
         )}
 
-        {!loading && term && hasilSearch && (
+        {!loading && term && (
           <>
-            <div style={{ fontSize: 11, color: '#9abaa8', margin: '6px 0' }}>{hasilSearch.length} paket ditemukan</div>
-            {hasilSearch.map(p => (
-              <RowPaket key={p.id} p={p} idx={0} allowReorder={false} />
-            ))}
+            {kamusLoading && <div style={{ textAlign: 'center', color: '#9abaa8', padding: 20 }}>Mencari...</div>}
+
+            {!kamusLoading && (
+              <>
+                {namaPaketDitemukan.length > 0 && (
+                  <div style={{ fontSize: 11, color: '#7aaa8a', margin: '6px 0 14px', lineHeight: 1.6 }}>
+                    Ditemukan di: <b>{namaPaketDitemukan.join(', ')}</b>
+                  </div>
+                )}
+
+                {kamusHasil.length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: '20px 0' }}>
+                    Gak ketemu kata "{search}"
+                  </div>
+                )}
+
+                {kamusHasil.map(k => (
+                  <div
+                    key={k.id} className="paket-row" style={{ cursor: k.paket ? 'pointer' : 'default' }}
+                    onClick={() => k.paket && openPaket(k.paket.id)}
+                  >
+                    <div className="info">
+                      <div className="nama">
+                        <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.jp}</span>
+                      </div>
+                      <div className="meta">
+                        <span>{k.arti}{k.paket ? ` · dari paket "${k.paket.nama}"` : ''}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </>
         )}
 
