@@ -546,7 +546,8 @@ async function hapusPdf() {
 
   if (!paket) return <div style={{ padding: 40, textAlign: 'center', color: '#9abaa8' }}>Memuat...</div>
 
-  const jumlahHafal = kataList.filter(k => k.hafal).length
+  const kataUntukStats = filterBagian !== 'all' ? kataList.filter(k => k.bagian === filterBagian) : kataList
+  const jumlahHafal = kataUntukStats.filter(k => k.hafal).length
   const selesai = tes && tes.idx >= tes.words.length
 
   return (
@@ -604,7 +605,7 @@ async function hapusPdf() {
             )}
           </div>
         )}
-        <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataList.length} kata · ✓ {jumlahHafal} hafal</div>
+        <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataUntukStats.length} kata · ✓ {jumlahHafal} hafal</div>
         <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
       </div>
 
