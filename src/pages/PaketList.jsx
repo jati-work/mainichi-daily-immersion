@@ -321,9 +321,6 @@ export default function PaketList({ goTo, openPaket }) {
             {p.pdf_path && <span title="Ada PDF">📄</span>}
             {p.adaIsiDiary && <span title="Ada catatan diary">📔</span>}
           </div>
-          <div className="meta">
-            <span>{p.jumlahKata} kata</span>
-          </div>
         </div>
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'paket', item: p })}>➜</button>
         <button className="icon-btn" title="Ubah nama" onClick={() => editPaket(p)}>✏️</button>
