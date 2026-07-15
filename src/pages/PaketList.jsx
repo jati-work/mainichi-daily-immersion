@@ -9,6 +9,9 @@ export default function PaketList({ goTo, openPaket }) {
   const [loading, setLoading] = useState(true)
   const [exportLoading, setExportLoading] = useState(false)
   const [movePicker, setMovePicker] = useState(null) // { type: 'folder'|'paket', item }
+  const [pindahMode, setPindahMode] = useState(false)
+  const [draggingIdx, setDraggingIdx] = useState(null)
+  const [dragOverIdx, setDragOverIdx] = useState(null)
 
   async function muatData() {
     setLoading(true)
@@ -227,17 +230,19 @@ export default function PaketList({ goTo, openPaket }) {
     return gab.sort((a, b) => a.urutan - b.urutan)
   }
 
-  async function pindahUrutanGabungan(item, dir) {
-    const items = itemsGabungan(item.tipe === 'folder' ? item.data.parent_id : item.data.folder_id)
-    const idx = items.findIndex(x => x.tipe === item.tipe && x.data.id === item.data.id)
-    const target = items[idx + dir]
-    if (!target) return
-    const tabelItem = item.tipe === 'folder' ? 'folders' : 'paket'
-    const kolomItem = item.tipe === 'folder' ? 'urutan' : 'urutan_dalam_grup'
-    const tabelTarget = target.tipe === 'folder' ? 'folders' : 'paket'
-    const kolomTarget = target.tipe === 'folder' ? 'urutan' : 'urutan_dalam_grup'
-    await supabase.from(tabelItem).update({ [kolomItem]: target.urutan }).eq('id', item.data.id)
-    await supabase.from(tabelTarget).update({ [kolomTarget]: item.urutan }).eq('id', target.data.id)
+  // pas item di-drop di posisi baru: susun ulang urutannya sesuai posisi
+  // baru itemsIni, terus simpen urutan sekuensial ke tabel masing-masing
+  async function pindahDrop(targetIdx) {
+    if (draggingIdx === null || draggingIdx === targetIdx) { setDraggingIdx(null); setDragOverIdx(null); return }
+    const arr = [...itemsIni]
+    const [moved] = arr.splice(draggingIdx, 1)
+    arr.splice(targetIdx, 0, moved)
+    setDraggingIdx(null); setDragOverIdx(null)
+    await Promise.all(arr.map((item, i) => {
+      const tabel = item.tipe === 'folder' ? 'folders' : 'paket'
+      const kolom = item.tipe === 'folder' ? 'urutan' : 'urutan_dalam_grup'
+      return supabase.from(tabel).update({ [kolom]: i }).eq('id', item.data.id)
+    }))
     muatData()
   }
 
@@ -285,49 +290,72 @@ export default function PaketList({ goTo, openPaket }) {
   const term = search.trim().toLowerCase()
   const hasilSearch = term ? paketList.filter(p => p.nama.toLowerCase().includes(term)) : null
 
-  function RowFolder({ f, idx }) {
-    const isiFolder = anakFolder(f.id).length
-    const isiPaket = anakPaket(f.id).length
-    return (
-      <div className="paket-row">
-        <div className="urutan-col">
-          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, -1)} disabled={idx === 0}>▲</button>
-          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, 1)} disabled={idx === itemsIni.length - 1}>▼</button>
-        </div>
-        <div className="info" onClick={() => setCurrentFolderId(f.id)}>
-          <div className="nama"><span>📁 {f.nama}</span></div>
-          <div className="meta">
-            <span>{isiFolder > 0 ? `${isiFolder} folder, ` : ''}{isiPaket} paket</span>
-          </div>
-        </div>
-        <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'folder', item: f })}>➜</button>
-        <button className="icon-btn" title="Rename folder" onClick={() => renameFolder(f)}>✏️</button>
-        <button className="icon-btn danger" title="Hapus folder" onClick={() => hapusFolder(f)}>✕</button>
-      </div>
-    )
-  }
+  function KartuItem({ item, idx, draggableAktif = true }) {
+    const isFolder = item.tipe === 'folder'
+    const data = item.data
+    const bisaDrag = pindahMode && draggableAktif
+    const isiFolder = isFolder ? anakFolder(data.id).length : 0
+    const isiPaket = isFolder ? anakPaket(data.id).length : 0
 
-  function RowPaket({ p, idx, allowReorder = true }) {
+    function handleClick() {
+      if (bisaDrag) return
+      isFolder ? setCurrentFolderId(data.id) : openPaket(data.id)
+    }
+
     return (
-      <div className="paket-row">
-        <div className="urutan-col">
-          {allowReorder && (
-            <>
-              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, -1)} disabled={idx === 0}>▲</button>
-              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, 1)} disabled={idx === itemsIni.length - 1}>▼</button>
-            </>
-          )}
-        </div>
-        <div className="info" onClick={() => openPaket(p.id)}>
-          <div className="nama">
-            <span>{p.nama}</span>
-            {p.pdf_path && <span title="Ada PDF">📄</span>}
-            {p.adaIsiDiary && <span title="Ada catatan diary">📔</span>}
+      <div
+        draggable={bisaDrag}
+        onClick={handleClick}
+        onDragStart={() => setDraggingIdx(idx)}
+        onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null) }}
+        onDragOver={e => { if (bisaDrag) { e.preventDefault(); setDragOverIdx(idx) } }}
+        onDragLeave={() => setDragOverIdx(cur => (cur === idx ? null : cur))}
+        onDrop={e => { e.preventDefault(); if (bisaDrag) pindahDrop(idx) }}
+        style={{
+          position: 'relative', width: 108, display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: '12px 6px', borderRadius: 12, textAlign: 'center',
+          cursor: bisaDrag ? 'grab' : 'pointer',
+          opacity: draggingIdx === idx ? 0.4 : 1,
+          background: dragOverIdx === idx && draggingIdx !== idx ? 'rgba(74,144,217,.12)' : 'transparent',
+          outline: dragOverIdx === idx && draggingIdx !== idx ? '2px dashed #4a90d9' : 'none',
+          transition: 'background .12s ease',
+        }}
+      >
+        {!pindahMode && (
+          <div style={{ position: 'absolute', top: 2, right: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <button
+              className="icon-btn" title="Pindahkan ke folder lain"
+              onClick={e => { e.stopPropagation(); setMovePicker({ type: isFolder ? 'folder' : 'paket', item: data }) }}
+              style={{ width: 20, height: 20, fontSize: 9 }}
+            >➜</button>
+            <button
+              className="icon-btn" title="Ubah nama"
+              onClick={e => { e.stopPropagation(); isFolder ? renameFolder(data) : editPaket(data) }}
+              style={{ width: 20, height: 20, fontSize: 9 }}
+            >✏️</button>
+            <button
+              className="icon-btn danger" title={isFolder ? 'Hapus folder' : 'Hapus paket'}
+              onClick={e => { e.stopPropagation(); isFolder ? hapusFolder(data) : hapusPaket(data) }}
+              style={{ width: 20, height: 20, fontSize: 9 }}
+            >✕</button>
           </div>
+        )}
+
+        <div style={{ fontSize: 38, lineHeight: 1 }}>{isFolder ? '📁' : '📚'}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a1a', marginTop: 6, wordBreak: 'break-word' }}>
+          {data.nama}
         </div>
-        <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'paket', item: p })}>➜</button>
-        <button className="icon-btn" title="Ubah nama" onClick={() => editPaket(p)}>✏️</button>
-        <button className="icon-btn danger" title="Hapus paket" onClick={() => hapusPaket(p)}>✕</button>
+        {!isFolder && (data.pdf_path || data.adaIsiDiary) && (
+          <div style={{ fontSize: 11, marginTop: 2 }}>
+            {data.pdf_path && <span title="Ada PDF">📄</span>}
+            {data.adaIsiDiary && <span title="Ada catatan diary"> 📔</span>}
+          </div>
+        )}
+        {isFolder && (
+          <div style={{ fontSize: 10, color: '#9abaa8', marginTop: 2 }}>
+            {isiFolder > 0 ? `${isiFolder} folder, ` : ''}{isiPaket} paket
+          </div>
+        )}
       </div>
     )
   }
@@ -397,66 +425,84 @@ export default function PaketList({ goTo, openPaket }) {
   return (
     <div className="cover" style={{ justifyContent: 'flex-start', paddingTop: 60 }}>
       <button className="back-fab" onClick={() => goTo('cover')}>←</button>
-      <div className="cover-inner">
-        <div className="cover-head">
-          <div className="cover-emoji">📚</div>
-          <div style={{ flex: 1 }}>
-            <div className="cover-title" style={{ fontSize: 22 }}>Kosakata Immersion</div>
-            <div className="cover-sub">kosakata dari keseharian</div>
+      <div className="cover-inner" style={{ maxWidth: 720 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="cover-emoji" style={{ fontSize: 26 }}>📚</div>
+            <div>
+              <div className="cover-title" style={{ fontSize: 19 }}>Kosakata Immersion</div>
+              <div className="cover-sub" style={{ fontSize: 11 }}>kosakata dari keseharian</div>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+
+          <input
+            className="input-search" placeholder="🔍 Cari nama paket..."
+            value={search} onChange={e => setSearch(e.target.value)}
+            style={{ width: 260, justifySelf: 'center' }}
+          />
+
+          <div style={{ display: 'flex', gap: 6, justifySelf: 'end', flexWrap: 'wrap' }}>
+            <button className="btn-dashed" onClick={tambahFolder} style={{ fontSize: 11, padding: '0 10px', height: 34 }}>＋ Folder</button>
+            <button className="btn-dashed" onClick={tambahPaketDiFolder} style={{ fontSize: 11, padding: '0 10px', height: 34 }}>＋ Paket</button>
             <button
               className="icon-btn" title="Download PDF (buat dibaca)" onClick={exportSemuaHafalan}
               disabled={exportLoading}
-              style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
+              style={{ width: 34, height: 34, fontSize: 11, fontWeight: 700 }}
             >
               {exportLoading ? '⏳' : 'PDF'}
             </button>
             <button
               className="icon-btn" title="Download TXT (buat dikasih ke AI)" onClick={exportTxtHafalan}
-              style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
+              style={{ width: 34, height: 34, fontSize: 11, fontWeight: 700 }}
             >
               MD
             </button>
           </div>
         </div>
 
-        <input
-          className="input-search" placeholder="🔍 Cari nama paket..."
-          value={search} onChange={e => setSearch(e.target.value)}
-        />
-
         {loading && <div style={{ textAlign: 'center', color: '#9abaa8', padding: 20 }}>Memuat...</div>}
 
         {!loading && !term && (
           <>
-            <Breadcrumb />
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <button className="btn-dashed" style={{ flex: 1 }} onClick={tambahFolder}>＋ Folder baru</button>
-              <button className="btn-dashed" style={{ flex: 1 }} onClick={tambahPaketDiFolder}>＋ Paket baru</button>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              <Breadcrumb />
+              {itemsIni.length > 1 && (
+                <button
+                  className="icon-btn"
+                  onClick={() => setPindahMode(m => !m)}
+                  title={pindahMode ? 'Matikan mode pindah urutan' : 'Aktifkan mode pindah urutan (geser posisi lewat drag & drop)'}
+                  style={{
+                    fontSize: 11, padding: '0 12px', height: 30, fontWeight: 600,
+                    background: pindahMode ? '#2d6a4a' : '#fff',
+                    color: pindahMode ? '#fff' : '#2d6a4a',
+                    border: '1.5px solid #2d6a4a',
+                  }}
+                >⇅ {pindahMode ? 'Selesai atur urutan' : 'Pindah urutan'}</button>
+              )}
             </div>
 
-            {subfolderIni.length === 0 && paketIni.length === 0 && (
+            {itemsIni.length === 0 && (
               <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: '20px 0' }}>
                 Folder ini masih kosong.
               </div>
             )}
 
-            {itemsIni.map((item, idx) =>
-              item.tipe === 'folder'
-                ? <RowFolder key={item.data.id} f={item.data} idx={idx} />
-                : <RowPaket key={item.data.id} p={item.data} idx={idx} />
-            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-start' }}>
+              {itemsIni.map((item, idx) => (
+                <KartuItem key={`${item.tipe}-${item.data.id}`} item={item} idx={idx} />
+              ))}
+            </div>
           </>
         )}
 
         {!loading && term && hasilSearch && (
           <>
-            <div style={{ fontSize: 11, color: '#9abaa8', margin: '6px 0' }}>{hasilSearch.length} paket ditemukan</div>
-            {hasilSearch.map(p => (
-              <RowPaket key={p.id} p={p} idx={0} allowReorder={false} />
-            ))}
+            <div style={{ fontSize: 11, color: '#9abaa8', margin: '6px 0 14px' }}>{hasilSearch.length} paket ditemukan</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-start' }}>
+              {hasilSearch.map(p => (
+                <KartuItem key={`paket-${p.id}`} item={{ tipe: 'paket', data: p }} idx={-1} draggableAktif={false} />
+              ))}
+            </div>
           </>
         )}
 
