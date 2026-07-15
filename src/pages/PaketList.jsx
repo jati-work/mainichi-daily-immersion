@@ -174,8 +174,8 @@ export default function PaketList({ goTo, openPaket }) {
   async function tambahFolder() {
     const nama = prompt('Nama folder baru:')
     if (!nama || !nama.trim()) return
-    const siblings = anakFolder(currentFolderId)
-    const urutan = siblings.length ? Math.max(...siblings.map(f => f.urutan)) + 1 : 0
+    const siblings = [...anakFolder(currentFolderId).map(f => f.urutan ?? 0), ...anakPaket(currentFolderId).map(p => p.urutan_dalam_grup ?? 0)]
+    const urutan = siblings.length ? Math.max(...siblings) + 1 : 0
     const { error } = await supabase.from('folders').insert({ nama: nama.trim(), parent_id: currentFolderId, urutan })
     if (error) alert('Gagal bikin folder: ' + error.message)
     else muatData()
@@ -217,13 +217,27 @@ export default function PaketList({ goTo, openPaket }) {
     else { setMovePicker(null); muatData() }
   }
 
-  async function pindahUrutanFolder(f, dir) {
-    const items = anakFolder(f.parent_id)
-    const idx = items.findIndex(x => x.id === f.id)
+  // gabungan folder + paket dalam satu folder, diurutin bareng biar bisa
+  // digeser naik-turun lintas tipe (paket bisa naik ngelewatin folder, dst)
+  function itemsGabungan(folderId) {
+    const gab = [
+      ...anakFolder(folderId).map(f => ({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 })),
+      ...anakPaket(folderId).map(p => ({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 })),
+    ]
+    return gab.sort((a, b) => a.urutan - b.urutan)
+  }
+
+  async function pindahUrutanGabungan(item, dir) {
+    const items = itemsGabungan(item.tipe === 'folder' ? item.data.parent_id : item.data.folder_id)
+    const idx = items.findIndex(x => x.tipe === item.tipe && x.data.id === item.data.id)
     const target = items[idx + dir]
     if (!target) return
-    await supabase.from('folders').update({ urutan: target.urutan }).eq('id', f.id)
-    await supabase.from('folders').update({ urutan: f.urutan }).eq('id', target.id)
+    const tabelItem = item.tipe === 'folder' ? 'folders' : 'paket'
+    const kolomItem = item.tipe === 'folder' ? 'urutan' : 'urutan_dalam_grup'
+    const tabelTarget = target.tipe === 'folder' ? 'folders' : 'paket'
+    const kolomTarget = target.tipe === 'folder' ? 'urutan' : 'urutan_dalam_grup'
+    await supabase.from(tabelItem).update({ [kolomItem]: target.urutan }).eq('id', item.data.id)
+    await supabase.from(tabelTarget).update({ [kolomTarget]: item.urutan }).eq('id', target.data.id)
     muatData()
   }
 
@@ -231,8 +245,8 @@ export default function PaketList({ goTo, openPaket }) {
   async function tambahPaketDiFolder() {
     const nama = prompt('Nama paket baru (contoh: N3 Mojigoi - Kanji Yomi):')
     if (!nama || !nama.trim()) return
-    const siblings = anakPaket(currentFolderId)
-    const urutan = siblings.length ? Math.max(...siblings.map(x => x.urutan_dalam_grup ?? 0)) + 1 : 0
+    const siblings = [...anakFolder(currentFolderId).map(f => f.urutan ?? 0), ...anakPaket(currentFolderId).map(p => p.urutan_dalam_grup ?? 0)]
+    const urutan = siblings.length ? Math.max(...siblings) + 1 : 0
     const { error } = await supabase.from('paket').insert({
       nama: nama.trim(), folder_id: currentFolderId, urutan_dalam_grup: urutan, urutan,
     })
@@ -255,16 +269,6 @@ export default function PaketList({ goTo, openPaket }) {
     else muatData()
   }
 
-  async function pindahDalamFolder(p, dir) {
-    const items = anakPaket(currentFolderId)
-    const idx = items.findIndex(x => x.id === p.id)
-    const target = items[idx + dir]
-    if (!target) return
-    await supabase.from('paket').update({ urutan_dalam_grup: target.urutan_dalam_grup }).eq('id', p.id)
-    await supabase.from('paket').update({ urutan_dalam_grup: p.urutan_dalam_grup }).eq('id', target.id)
-    muatData()
-  }
-
   async function pindahPaketKe(p, targetFolderId) {
     const siblings = anakPaket(targetFolderId).filter(x => x.id !== p.id)
     const urutan = siblings.length ? Math.max(...siblings.map(x => x.urutan_dalam_grup ?? 0)) + 1 : 0
@@ -275,20 +279,20 @@ export default function PaketList({ goTo, openPaket }) {
 
   const subfolderIni = useMemo(() => anakFolder(currentFolderId), [folders, currentFolderId])
   const paketIni = useMemo(() => anakPaket(currentFolderId), [paketList, currentFolderId])
+  const itemsIni = useMemo(() => itemsGabungan(currentFolderId), [subfolderIni, paketIni])
   const jejak = useMemo(() => jejakBreadcrumb(currentFolderId), [folders, currentFolderId])
 
   const term = search.trim().toLowerCase()
   const hasilSearch = term ? paketList.filter(p => p.nama.toLowerCase().includes(term)) : null
 
-  function RowFolder({ f, siblings }) {
-    const idx = siblings.findIndex(x => x.id === f.id)
+  function RowFolder({ f, idx }) {
     const isiFolder = anakFolder(f.id).length
     const isiPaket = anakPaket(f.id).length
     return (
       <div className="paket-row">
         <div className="urutan-col">
-          <button onClick={() => pindahUrutanFolder(f, -1)} disabled={idx === 0}>▲</button>
-          <button onClick={() => pindahUrutanFolder(f, 1)} disabled={idx === siblings.length - 1}>▼</button>
+          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, -1)} disabled={idx === 0}>▲</button>
+          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, 1)} disabled={idx === itemsIni.length - 1}>▼</button>
         </div>
         <div className="info" onClick={() => setCurrentFolderId(f.id)}>
           <div className="nama"><span>📁 {f.nama}</span></div>
@@ -303,15 +307,14 @@ export default function PaketList({ goTo, openPaket }) {
     )
   }
 
-  function RowPaket({ p, siblings, allowReorder = true }) {
-    const idx = siblings.findIndex(x => x.id === p.id)
+  function RowPaket({ p, idx, allowReorder = true }) {
     return (
       <div className="paket-row">
         <div className="urutan-col">
           {allowReorder && (
             <>
-              <button onClick={() => pindahDalamFolder(p, -1)} disabled={idx === 0}>▲</button>
-              <button onClick={() => pindahDalamFolder(p, 1)} disabled={idx === siblings.length - 1}>▼</button>
+              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, -1)} disabled={idx === 0}>▲</button>
+              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, 1)} disabled={idx === itemsIni.length - 1}>▼</button>
             </>
           )}
         </div>
@@ -440,8 +443,11 @@ export default function PaketList({ goTo, openPaket }) {
               </div>
             )}
 
-            {subfolderIni.map(f => <RowFolder key={f.id} f={f} siblings={subfolderIni} />)}
-            {paketIni.map(p => <RowPaket key={p.id} p={p} siblings={paketIni} />)}
+            {itemsIni.map((item, idx) =>
+              item.tipe === 'folder'
+                ? <RowFolder key={item.data.id} f={item.data} idx={idx} />
+                : <RowPaket key={item.data.id} p={item.data} idx={idx} />
+            )}
           </>
         )}
 
@@ -449,7 +455,7 @@ export default function PaketList({ goTo, openPaket }) {
           <>
             <div style={{ fontSize: 11, color: '#9abaa8', margin: '6px 0' }}>{hasilSearch.length} paket ditemukan</div>
             {hasilSearch.map(p => (
-              <RowPaket key={p.id} p={p} siblings={[]} allowReorder={false} />
+              <RowPaket key={p.id} p={p} idx={0} allowReorder={false} />
             ))}
           </>
         )}
