@@ -24,10 +24,10 @@ export default function PaketList({ goTo, openPaket }) {
   async function muatData() {
     setLoading(true)
     const [{ data: fData, error: fErr }, { data: pData, error: pErr }] = await Promise.all([
-      supabase.from('folders').select('id, nama, parent_id, urutan').order('urutan', { ascending: true }),
+      supabase.from('folders').select('id, nama, parent_id, urutan, kolom').order('urutan', { ascending: true }),
       supabase
         .from('paket')
-        .select('id, nama, folder_id, urutan_dalam_grup, pdf_path, kata(count), diary_pages(isi_teks)')
+        .select('id, nama, folder_id, urutan_dalam_grup, pdf_path, kolom, kata(count), diary_pages(isi_teks)')
         .order('urutan_dalam_grup', { ascending: true }),
     ])
     if (!fErr && fData) setFolders(fData)
@@ -235,6 +235,15 @@ export default function PaketList({ goTo, openPaket }) {
     muatData()
   }
 
+  // ---------- kiri/kanan (cuma dipakai di Beranda / root) ----------
+  async function toggleKolom(item) {
+    const tabel = item.tipe === 'folder' ? 'folders' : 'paket'
+    const kolomBaru = (item.data.kolom || 'kiri') === 'kiri' ? 'kanan' : 'kiri'
+    const { error } = await supabase.from(tabel).update({ kolom: kolomBaru }).eq('id', item.data.id)
+    if (error) alert('Gagal pindah sisi: ' + error.message)
+    else muatData()
+  }
+
   async function pindahFolderKe(f, targetParentId) {
     if (f.id === targetParentId) return
     if (idFolderTurunan(f.id).has(targetParentId)) { alert('Gak bisa pindahin folder ke dalam dirinya sendiri / anaknya sendiri.'); return }
@@ -308,6 +317,8 @@ export default function PaketList({ goTo, openPaket }) {
   const subfolderIni = useMemo(() => anakFolder(currentFolderId), [folders, currentFolderId])
   const paketIni = useMemo(() => anakPaket(currentFolderId), [paketList, currentFolderId])
   const itemsIni = useMemo(() => itemsGabungan(currentFolderId), [subfolderIni, paketIni])
+  const itemsKiri = useMemo(() => itemsIni.filter(item => (item.data.kolom || 'kiri') === 'kiri'), [itemsIni])
+  const itemsKanan = useMemo(() => itemsIni.filter(item => (item.data.kolom || 'kiri') === 'kanan'), [itemsIni])
   const jejak = useMemo(() => jejakBreadcrumb(currentFolderId), [folders, currentFolderId])
 
   const term = search.trim()
@@ -316,14 +327,14 @@ export default function PaketList({ goTo, openPaket }) {
     return [...set]
   }, [kamusHasil])
 
-  function RowFolder({ f, idx }) {
+  function RowFolder({ f, disableUp, disableDown, showKolomToggle }) {
     const isiFolder = anakFolder(f.id).length
     const isiPaket = anakPaket(f.id).length
     return (
       <div className="paket-row">
         <div className="urutan-col">
-          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, -1)} disabled={idx === 0}>▲</button>
-          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, 1)} disabled={idx === itemsIni.length - 1}>▼</button>
+          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, -1)} disabled={disableUp}>▲</button>
+          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, 1)} disabled={disableDown}>▼</button>
         </div>
         <div className="info" onClick={() => setCurrentFolderId(f.id)}>
           <div className="nama"><span>📁 {f.nama}</span></div>
@@ -331,6 +342,13 @@ export default function PaketList({ goTo, openPaket }) {
             <span>{isiFolder > 0 ? `${isiFolder} folder, ` : ''}{isiPaket} paket</span>
           </div>
         </div>
+        {showKolomToggle && (
+          <button
+            className="icon-btn"
+            title={(f.kolom || 'kiri') === 'kiri' ? 'Pindah ke kolom kanan' : 'Pindah ke kolom kiri'}
+            onClick={() => toggleKolom({ tipe: 'folder', data: f })}
+          >{(f.kolom || 'kiri') === 'kiri' ? '➡️' : '⬅️'}</button>
+        )}
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'folder', item: f })}>➜</button>
         <button className="icon-btn" title="Rename folder" onClick={() => renameFolder(f)}>✏️</button>
         <button className="icon-btn danger" title="Hapus folder" onClick={() => hapusFolder(f)}>✕</button>
@@ -338,14 +356,14 @@ export default function PaketList({ goTo, openPaket }) {
     )
   }
 
-  function RowPaket({ p, idx, allowReorder = true }) {
+  function RowPaket({ p, disableUp, disableDown, allowReorder = true, showKolomToggle }) {
     return (
       <div className="paket-row">
         <div className="urutan-col">
           {allowReorder && (
             <>
-              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, -1)} disabled={idx === 0}>▲</button>
-              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, 1)} disabled={idx === itemsIni.length - 1}>▼</button>
+              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, -1)} disabled={disableUp}>▲</button>
+              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, 1)} disabled={disableDown}>▼</button>
             </>
           )}
         </div>
@@ -356,6 +374,13 @@ export default function PaketList({ goTo, openPaket }) {
             {p.adaIsiDiary && <span title="Ada catatan diary">📔</span>}
           </div>
         </div>
+        {showKolomToggle && (
+          <button
+            className="icon-btn"
+            title={(p.kolom || 'kiri') === 'kiri' ? 'Pindah ke kolom kanan' : 'Pindah ke kolom kiri'}
+            onClick={() => toggleKolom({ tipe: 'paket', data: p })}
+          >{(p.kolom || 'kiri') === 'kiri' ? '➡️' : '⬅️'}</button>
+        )}
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'paket', item: p })}>➜</button>
         <button className="icon-btn" title="Ubah nama" onClick={() => editPaket(p)}>✏️</button>
         <button className="icon-btn danger" title="Hapus paket" onClick={() => hapusPaket(p)}>✕</button>
@@ -502,10 +527,37 @@ export default function PaketList({ goTo, openPaket }) {
               </div>
             )}
 
-            {itemsIni.map((item, idx) =>
-              item.tipe === 'folder'
-                ? <RowFolder key={item.data.id} f={item.data} idx={idx} />
-                : <RowPaket key={item.data.id} p={item.data} idx={idx} />
+            {currentFolderId === null ? (
+              <div className="beranda-kolom-wrap">
+                <div className="beranda-kolom">
+                  <div className="beranda-kolom-label">📚 Buku</div>
+                  {itemsKiri.map((item, idx) =>
+                    item.tipe === 'folder'
+                      ? <RowFolder key={item.data.id} f={item.data} disableUp={idx === 0} disableDown={idx === itemsKiri.length - 1} showKolomToggle />
+                      : <RowPaket key={item.data.id} p={item.data} disableUp={idx === 0} disableDown={idx === itemsKiri.length - 1} showKolomToggle />
+                  )}
+                  {itemsKiri.length === 0 && (
+                    <div style={{ textAlign: 'center', color: '#c8ddc8', fontSize: 11, padding: '10px 0' }}>Kosong</div>
+                  )}
+                </div>
+                <div className="beranda-kolom">
+                  <div className="beranda-kolom-label">🎬 Harian</div>
+                  {itemsKanan.map((item, idx) =>
+                    item.tipe === 'folder'
+                      ? <RowFolder key={item.data.id} f={item.data} disableUp={idx === 0} disableDown={idx === itemsKanan.length - 1} showKolomToggle />
+                      : <RowPaket key={item.data.id} p={item.data} disableUp={idx === 0} disableDown={idx === itemsKanan.length - 1} showKolomToggle />
+                  )}
+                  {itemsKanan.length === 0 && (
+                    <div style={{ textAlign: 'center', color: '#c8ddc8', fontSize: 11, padding: '10px 0' }}>Kosong</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              itemsIni.map((item, idx) =>
+                item.tipe === 'folder'
+                  ? <RowFolder key={item.data.id} f={item.data} disableUp={idx === 0} disableDown={idx === itemsIni.length - 1} />
+                  : <RowPaket key={item.data.id} p={item.data} disableUp={idx === 0} disableDown={idx === itemsIni.length - 1} />
+              )
             )}
           </>
         )}
