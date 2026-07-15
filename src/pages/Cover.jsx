@@ -44,9 +44,7 @@ export default function Cover({ goTo, jumlahPaket, jumlahKata, jumlahHariJurnal 
           <div className="nav-icon">📚</div>
           <div className="nav-info">
             <div className="nav-title">Kosakata Immersion</div>
-            <div className="nav-desc">
-              {jumlahPaket ? `${jumlahPaket} paket · ${jumlahKata} kata` : 'kosakata dari keseharian'}
-            </div>
+            <div className="nav-desc">kosakata dari keseharian</div>
           </div>
         </div>
 
