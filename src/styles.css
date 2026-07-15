@@ -52,6 +52,16 @@ button, input, textarea { font-family: inherit; }
   font-size: 13px; outline: none; margin-bottom: 12px; box-sizing: border-box; background: #fff; color: var(--accent);
 }
 
+.beranda-kolom-wrap { display: flex; gap: 14px; align-items: flex-start; }
+.beranda-kolom { flex: 1; min-width: 0; }
+.beranda-kolom-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px;
+}
+@media (max-width: 640px) {
+  .beranda-kolom-wrap { flex-direction: column; }
+}
+
 .paket-row {
   display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 12px;
   border: 1.5px solid var(--border-soft); padding: 11px 14px; margin-bottom: 8px;
