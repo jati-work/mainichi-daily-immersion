@@ -11,6 +11,15 @@ export default function PaketList({ goTo, openPaket }) {
   const [movePicker, setMovePicker] = useState(null) // { type: 'folder'|'paket', item }
   const [kamusHasil, setKamusHasil] = useState([])
   const [kamusLoading, setKamusLoading] = useState(false)
+  const [showTambahMenu, setShowTambahMenu] = useState(false)
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (!e.target.closest('[data-tambah-menu]')) setShowTambahMenu(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   async function muatData() {
     setLoading(true)
@@ -356,7 +365,7 @@ export default function PaketList({ goTo, openPaket }) {
 
   function Breadcrumb() {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', fontSize: 12, margin: '2px 0 12px', color: 'var(--muted)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', fontSize: 13, fontWeight: 500, color: 'var(--muted)' }}>
         <span
           style={{ cursor: 'pointer', fontWeight: currentFolderId === null ? 700 : 500, color: currentFolderId === null ? 'var(--accent)' : 'var(--muted)' }}
           onClick={() => setCurrentFolderId(null)}
@@ -454,9 +463,36 @@ export default function PaketList({ goTo, openPaket }) {
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
               <Breadcrumb />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="icon-btn" title="Folder baru" onClick={tambahFolder} style={{ width: 40, height: 32, fontSize: 13 }}>＋📁</button>
-                <button className="icon-btn" title="Paket baru" onClick={tambahPaketDiFolder} style={{ width: 40, height: 32, fontSize: 13 }}>＋📚</button>
+              <div style={{ position: 'relative' }} data-tambah-menu>
+                <button
+                  className="icon-btn" title="Tambah folder atau paket"
+                  onClick={() => setShowTambahMenu(s => !s)}
+                  style={{ width: 34, height: 34, fontSize: 18, fontWeight: 700 }}
+                >⋯</button>
+                {showTambahMenu && (
+                  <div
+                    style={{
+                      position: 'absolute', top: '110%', right: 0, background: '#fff', borderRadius: 10,
+                      boxShadow: '0 6px 18px rgba(0,0,0,.15)', border: '1px solid #e5e5e5',
+                      minWidth: 170, zIndex: 20, overflow: 'hidden',
+                    }}
+                  >
+                    <button
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                        padding: '10px 14px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 13,
+                      }}
+                      onClick={() => { setShowTambahMenu(false); tambahFolder() }}
+                    >📁 Folder baru</button>
+                    <button
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                        padding: '10px 14px', border: 'none', borderTop: '1px solid #f0f0f0', background: '#fff', cursor: 'pointer', fontSize: 13,
+                      }}
+                      onClick={() => { setShowTambahMenu(false); tambahPaketDiFolder() }}
+                    >📚 Paket baru</button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -502,7 +538,7 @@ export default function PaketList({ goTo, openPaket }) {
                         <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.jp}</span>
                       </div>
                       <div className="meta">
-                        <span>{k.arti}{k.paket ? ` · dari paket "${k.paket.nama}"` : ''}</span>
+                        <span>{k.arti}</span>
                       </div>
                     </div>
                   </div>
