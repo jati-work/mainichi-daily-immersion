@@ -52,14 +52,10 @@ button, input, textarea { font-family: inherit; }
   font-size: 13px; outline: none; margin-bottom: 12px; box-sizing: border-box; background: #fff; color: var(--accent);
 }
 
-.beranda-kolom-wrap { display: flex; gap: 14px; align-items: flex-start; }
-.beranda-kolom { flex: 1; min-width: 0; }
-.beranda-kolom-label {
-  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 6px;
-}
+.panel-divider { width: 1.5px; align-self: stretch; background: var(--border-soft); flex-shrink: 0; margin: 0 2px; }
 @media (max-width: 640px) {
-  .beranda-kolom-wrap { flex-direction: column; }
+  .panel-dua-sisi { flex-direction: column; }
+  .panel-divider { width: 100%; height: 1.5px; margin: 18px 0; }
 }
 
 .paket-row {
