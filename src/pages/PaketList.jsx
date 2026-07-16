@@ -4,18 +4,19 @@ import { supabase } from '../supabaseClient'
 export default function PaketList({ goTo, openPaket }) {
   const [folders, setFolders] = useState([])
   const [paketList, setPaketList] = useState([])
-  const [currentFolderId, setCurrentFolderId] = useState(null) // null = root/beranda
+  const [folderKiri, setFolderKiri] = useState(null)   // currentFolderId panel BUKU (null = root panel kiri)
+  const [folderKanan, setFolderKanan] = useState(null) // currentFolderId panel HARIAN (null = root panel kanan)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [exportLoading, setExportLoading] = useState(false)
   const [movePicker, setMovePicker] = useState(null) // { type: 'folder'|'paket', item }
   const [kamusHasil, setKamusHasil] = useState([])
   const [kamusLoading, setKamusLoading] = useState(false)
-  const [showTambahMenu, setShowTambahMenu] = useState(false)
+  const [tambahMenuSisi, setTambahMenuSisi] = useState(null) // 'kiri' | 'kanan' | null
 
   useEffect(() => {
     function handleClickOutside(e) {
-      if (!e.target.closest('[data-tambah-menu]')) setShowTambahMenu(false)
+      if (!e.target.closest('[data-tambah-menu]')) setTambahMenuSisi(null)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -60,18 +61,36 @@ export default function PaketList({ goTo, openPaket }) {
     return () => clearTimeout(timer)
   }, [search])
 
-  // ---------- helper: struktur folder ----------
-  function anakFolder(parentId) {
-    return folders.filter(f => f.parent_id === parentId).sort((a, b) => a.urutan - b.urutan)
+  // ---------- helper: struktur folder (sadar sisi kiri/kanan) ----------
+  // di level ROOT (parentId null), kefilter sesuai kolom (kiri=buku, kanan=harian).
+  // begitu udah masuk ke dalem sub-folder, kolom nggak dipake lagi -- soalnya
+  // struktur folder itu tree biasa, jadi begitu "masuk" ke sisi tertentu,
+  // semua anak-cucunya otomatis ikut sisi itu (nggak ada folder yang nyambung
+  // ke 2 sisi sekaligus).
+  function anakFolder(parentId, sisi) {
+    return folders
+      .filter(f => parentId === null ? (f.parent_id === null && (f.kolom || 'kiri') === sisi) : f.parent_id === parentId)
+      .sort((a, b) => a.urutan - b.urutan)
   }
-  function anakPaket(folderId) {
-    return paketList.filter(p => p.folder_id === folderId).sort((a, b) => (a.urutan_dalam_grup ?? 0) - (b.urutan_dalam_grup ?? 0))
+  function anakPaket(folderId, sisi) {
+    return paketList
+      .filter(p => folderId === null ? (p.folder_id === null && (p.kolom || 'kiri') === sisi) : p.folder_id === folderId)
+      .sort((a, b) => (a.urutan_dalam_grup ?? 0) - (b.urutan_dalam_grup ?? 0))
   }
   function jejakBreadcrumb(id) {
     const path = []
     let cur = folders.find(f => f.id === id)
     while (cur) { path.unshift(cur); cur = folders.find(f => f.id === cur.parent_id) }
     return path
+  }
+  // nentuin sisi (kiri/kanan) suatu folder/paket, dengan naik ke folder root
+  // leluhurnya kalau dia nempel di dalem sub-folder
+  function sisiItem(item) {
+    const parentId = item.tipe === 'folder' ? item.data.parent_id : item.data.folder_id
+    if (parentId === null) return item.data.kolom || 'kiri'
+    let cur = folders.find(f => f.id === parentId)
+    while (cur && cur.parent_id) cur = folders.find(f => f.id === cur.parent_id)
+    return cur?.kolom || 'kiri'
   }
   // semua id folder di bawah (dan termasuk) folder ini -- dipakai buat cegah
   // "pindahin folder ke dalam anaknya sendiri" dan buat hitung isi pas mau dihapus
@@ -199,12 +218,14 @@ export default function PaketList({ goTo, openPaket }) {
   }
 
   // ---------- aksi folder ----------
-  async function tambahFolder() {
+  async function tambahFolder(sisi, currentId) {
     const nama = prompt('Nama folder baru:')
     if (!nama || !nama.trim()) return
-    const siblings = [...anakFolder(currentFolderId).map(f => f.urutan ?? 0), ...anakPaket(currentFolderId).map(p => p.urutan_dalam_grup ?? 0)]
+    const siblings = [...anakFolder(currentId, sisi).map(f => f.urutan ?? 0), ...anakPaket(currentId, sisi).map(p => p.urutan_dalam_grup ?? 0)]
     const urutan = siblings.length ? Math.max(...siblings) + 1 : 0
-    const { error } = await supabase.from('folders').insert({ nama: nama.trim(), parent_id: currentFolderId, urutan })
+    const payload = { nama: nama.trim(), parent_id: currentId, urutan }
+    if (currentId === null) payload.kolom = sisi
+    const { error } = await supabase.from('folders').insert(payload)
     if (error) alert('Gagal bikin folder: ' + error.message)
     else muatData()
   }
@@ -231,41 +252,37 @@ export default function PaketList({ goTo, openPaket }) {
     }
     const { error } = await supabase.from('folders').delete().eq('id', f.id)
     if (error) { alert('Gagal hapus folder: ' + error.message); return }
-    if (currentFolderId && idTurunan.includes(currentFolderId)) setCurrentFolderId(f.parent_id ?? null)
+    if (folderKiri && idTurunan.includes(folderKiri)) setFolderKiri(f.parent_id ?? null)
+    if (folderKanan && idTurunan.includes(folderKanan)) setFolderKanan(f.parent_id ?? null)
     muatData()
-  }
-
-  // ---------- kiri/kanan (cuma dipakai di Beranda / root) ----------
-  async function toggleKolom(item) {
-    const tabel = item.tipe === 'folder' ? 'folders' : 'paket'
-    const kolomBaru = (item.data.kolom || 'kiri') === 'kiri' ? 'kanan' : 'kiri'
-    const { error } = await supabase.from(tabel).update({ kolom: kolomBaru }).eq('id', item.data.id)
-    if (error) alert('Gagal pindah sisi: ' + error.message)
-    else muatData()
   }
 
   async function pindahFolderKe(f, targetParentId) {
     if (f.id === targetParentId) return
     if (idFolderTurunan(f.id).has(targetParentId)) { alert('Gak bisa pindahin folder ke dalam dirinya sendiri / anaknya sendiri.'); return }
-    const siblings = anakFolder(targetParentId).filter(x => x.id !== f.id)
+    const sisi = sisiItem({ tipe: 'folder', data: f })
+    const siblings = anakFolder(targetParentId, sisi).filter(x => x.id !== f.id)
     const urutan = siblings.length ? Math.max(...siblings.map(x => x.urutan)) + 1 : 0
-    const { error } = await supabase.from('folders').update({ parent_id: targetParentId, urutan }).eq('id', f.id)
+    const payload = { parent_id: targetParentId, urutan }
+    if (targetParentId === null) payload.kolom = sisi
+    const { error } = await supabase.from('folders').update(payload).eq('id', f.id)
     if (error) alert('Gagal pindah: ' + error.message)
     else { setMovePicker(null); muatData() }
   }
 
   // gabungan folder + paket dalam satu folder, diurutin bareng biar bisa
   // digeser naik-turun lintas tipe (paket bisa naik ngelewatin folder, dst)
-  function itemsGabungan(folderId) {
+  function itemsGabungan(folderId, sisi) {
     const gab = [
-      ...anakFolder(folderId).map(f => ({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 })),
-      ...anakPaket(folderId).map(p => ({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 })),
+      ...anakFolder(folderId, sisi).map(f => ({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 })),
+      ...anakPaket(folderId, sisi).map(p => ({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 })),
     ]
     return gab.sort((a, b) => a.urutan - b.urutan)
   }
 
-  async function pindahUrutanGabungan(item, dir) {
-    const items = itemsGabungan(item.tipe === 'folder' ? item.data.parent_id : item.data.folder_id)
+  async function pindahUrutanGabungan(item, dir, sisi) {
+    const parentId = item.tipe === 'folder' ? item.data.parent_id : item.data.folder_id
+    const items = itemsGabungan(parentId, sisi)
     const idx = items.findIndex(x => x.tipe === item.tipe && x.data.id === item.data.id)
     const target = items[idx + dir]
     if (!target) return
@@ -279,14 +296,14 @@ export default function PaketList({ goTo, openPaket }) {
   }
 
   // ---------- aksi paket ----------
-  async function tambahPaketDiFolder() {
+  async function tambahPaketDiFolder(sisi, currentId) {
     const nama = prompt('Nama paket baru (contoh: N3 Mojigoi - Kanji Yomi):')
     if (!nama || !nama.trim()) return
-    const siblings = [...anakFolder(currentFolderId).map(f => f.urutan ?? 0), ...anakPaket(currentFolderId).map(p => p.urutan_dalam_grup ?? 0)]
+    const siblings = [...anakFolder(currentId, sisi).map(f => f.urutan ?? 0), ...anakPaket(currentId, sisi).map(p => p.urutan_dalam_grup ?? 0)]
     const urutan = siblings.length ? Math.max(...siblings) + 1 : 0
-    const { error } = await supabase.from('paket').insert({
-      nama: nama.trim(), folder_id: currentFolderId, urutan_dalam_grup: urutan, urutan,
-    })
+    const payload = { nama: nama.trim(), folder_id: currentId, urutan_dalam_grup: urutan, urutan }
+    if (currentId === null) payload.kolom = sisi
+    const { error } = await supabase.from('paket').insert(payload)
     if (error) alert('Gagal nambah paket: ' + error.message)
     else muatData()
   }
@@ -307,19 +324,24 @@ export default function PaketList({ goTo, openPaket }) {
   }
 
   async function pindahPaketKe(p, targetFolderId) {
-    const siblings = anakPaket(targetFolderId).filter(x => x.id !== p.id)
+    const sisi = sisiItem({ tipe: 'paket', data: p })
+    const siblings = anakPaket(targetFolderId, sisi).filter(x => x.id !== p.id)
     const urutan = siblings.length ? Math.max(...siblings.map(x => x.urutan_dalam_grup ?? 0)) + 1 : 0
-    const { error } = await supabase.from('paket').update({ folder_id: targetFolderId, urutan_dalam_grup: urutan }).eq('id', p.id)
+    const payload = { folder_id: targetFolderId, urutan_dalam_grup: urutan }
+    if (targetFolderId === null) payload.kolom = sisi
+    const { error } = await supabase.from('paket').update(payload).eq('id', p.id)
     if (error) alert('Gagal pindah: ' + error.message)
     else { setMovePicker(null); muatData() }
   }
 
-  const subfolderIni = useMemo(() => anakFolder(currentFolderId), [folders, currentFolderId])
-  const paketIni = useMemo(() => anakPaket(currentFolderId), [paketList, currentFolderId])
-  const itemsIni = useMemo(() => itemsGabungan(currentFolderId), [subfolderIni, paketIni])
-  const itemsKiri = useMemo(() => itemsIni.filter(item => (item.data.kolom || 'kiri') === 'kiri'), [itemsIni])
-  const itemsKanan = useMemo(() => itemsIni.filter(item => (item.data.kolom || 'kiri') === 'kanan'), [itemsIni])
-  const jejak = useMemo(() => jejakBreadcrumb(currentFolderId), [folders, currentFolderId])
+  // ---------- kiri/kanan (cuma dipakai buat pindahin item ROOT ke sisi lain) ----------
+  async function toggleKolom(item) {
+    const tabel = item.tipe === 'folder' ? 'folders' : 'paket'
+    const kolomBaru = (item.data.kolom || 'kiri') === 'kiri' ? 'kanan' : 'kiri'
+    const { error } = await supabase.from(tabel).update({ kolom: kolomBaru }).eq('id', item.data.id)
+    if (error) alert('Gagal pindah sisi: ' + error.message)
+    else muatData()
+  }
 
   const term = search.trim()
   const namaPaketDitemukan = useMemo(() => {
@@ -327,16 +349,27 @@ export default function PaketList({ goTo, openPaket }) {
     return [...set]
   }, [kamusHasil])
 
-  function RowFolder({ f, disableUp, disableDown, showKolomToggle }) {
-    const isiFolder = anakFolder(f.id).length
-    const isiPaket = anakPaket(f.id).length
+  // data per panel, dihitung ulang tiap folders/paketList/folderKiri/folderKanan berubah
+  const subfolderKiri = useMemo(() => anakFolder(folderKiri, 'kiri'), [folders, folderKiri])
+  const paketKiri = useMemo(() => anakPaket(folderKiri, 'kiri'), [paketList, folderKiri])
+  const itemsKiri = useMemo(() => itemsGabungan(folderKiri, 'kiri'), [subfolderKiri, paketKiri])
+  const jejakKiri = useMemo(() => jejakBreadcrumb(folderKiri), [folders, folderKiri])
+
+  const subfolderKanan = useMemo(() => anakFolder(folderKanan, 'kanan'), [folders, folderKanan])
+  const paketKanan = useMemo(() => anakPaket(folderKanan, 'kanan'), [paketList, folderKanan])
+  const itemsKanan = useMemo(() => itemsGabungan(folderKanan, 'kanan'), [subfolderKanan, paketKanan])
+  const jejakKanan = useMemo(() => jejakBreadcrumb(folderKanan), [folders, folderKanan])
+
+  function RowFolder({ f, idx, itemsLen, sisi, onOpen, showKolomToggle }) {
+    const isiFolder = anakFolder(f.id, sisi).length
+    const isiPaket = anakPaket(f.id, sisi).length
     return (
       <div className="paket-row">
         <div className="urutan-col">
-          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, -1)} disabled={disableUp}>▲</button>
-          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, 1)} disabled={disableDown}>▼</button>
+          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, -1, sisi)} disabled={idx === 0}>▲</button>
+          <button onClick={() => pindahUrutanGabungan({ tipe: 'folder', data: f, urutan: f.urutan ?? 0 }, 1, sisi)} disabled={idx === itemsLen - 1}>▼</button>
         </div>
-        <div className="info" onClick={() => setCurrentFolderId(f.id)}>
+        <div className="info" onClick={onOpen}>
           <div className="nama"><span>📁 {f.nama}</span></div>
           <div className="meta">
             <span>{isiFolder > 0 ? `${isiFolder} folder, ` : ''}{isiPaket} paket</span>
@@ -345,9 +378,9 @@ export default function PaketList({ goTo, openPaket }) {
         {showKolomToggle && (
           <button
             className="icon-btn"
-            title={(f.kolom || 'kiri') === 'kiri' ? 'Pindah ke kolom kanan' : 'Pindah ke kolom kiri'}
+            title={sisi === 'kiri' ? 'Pindah ke sisi Harian' : 'Pindah ke sisi Buku'}
             onClick={() => toggleKolom({ tipe: 'folder', data: f })}
-          >{(f.kolom || 'kiri') === 'kiri' ? '➡️' : '⬅️'}</button>
+          >{sisi === 'kiri' ? '➡️' : '⬅️'}</button>
         )}
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'folder', item: f })}>➜</button>
         <button className="icon-btn" title="Rename folder" onClick={() => renameFolder(f)}>✏️</button>
@@ -356,14 +389,14 @@ export default function PaketList({ goTo, openPaket }) {
     )
   }
 
-  function RowPaket({ p, disableUp, disableDown, allowReorder = true, showKolomToggle }) {
+  function RowPaket({ p, idx, itemsLen, sisi, allowReorder = true, showKolomToggle }) {
     return (
       <div className="paket-row">
         <div className="urutan-col">
           {allowReorder && (
             <>
-              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, -1)} disabled={disableUp}>▲</button>
-              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, 1)} disabled={disableDown}>▼</button>
+              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, -1, sisi)} disabled={idx === 0}>▲</button>
+              <button onClick={() => pindahUrutanGabungan({ tipe: 'paket', data: p, urutan: p.urutan_dalam_grup ?? 0 }, 1, sisi)} disabled={idx === itemsLen - 1}>▼</button>
             </>
           )}
         </div>
@@ -377,9 +410,9 @@ export default function PaketList({ goTo, openPaket }) {
         {showKolomToggle && (
           <button
             className="icon-btn"
-            title={(p.kolom || 'kiri') === 'kiri' ? 'Pindah ke kolom kanan' : 'Pindah ke kolom kiri'}
+            title={sisi === 'kiri' ? 'Pindah ke sisi Harian' : 'Pindah ke sisi Buku'}
             onClick={() => toggleKolom({ tipe: 'paket', data: p })}
-          >{(p.kolom || 'kiri') === 'kiri' ? '➡️' : '⬅️'}</button>
+          >{sisi === 'kiri' ? '➡️' : '⬅️'}</button>
         )}
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'paket', item: p })}>➜</button>
         <button className="icon-btn" title="Ubah nama" onClick={() => editPaket(p)}>✏️</button>
@@ -388,19 +421,19 @@ export default function PaketList({ goTo, openPaket }) {
     )
   }
 
-  function Breadcrumb() {
+  function Breadcrumb({ currentId, jejak, onNavigate }) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', fontSize: 13, fontWeight: 500, color: 'var(--muted)' }}>
         <span
-          style={{ cursor: 'pointer', fontWeight: currentFolderId === null ? 700 : 500, color: currentFolderId === null ? 'var(--accent)' : 'var(--muted)' }}
-          onClick={() => setCurrentFolderId(null)}
+          style={{ cursor: 'pointer', fontWeight: currentId === null ? 700 : 500, color: currentId === null ? 'var(--accent)' : 'var(--muted)' }}
+          onClick={() => onNavigate(null)}
         >🏠 Beranda</span>
         {jejak.map(f => (
           <span key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>/</span>
             <span
-              style={{ cursor: 'pointer', fontWeight: f.id === currentFolderId ? 700 : 500, color: f.id === currentFolderId ? 'var(--accent)' : 'var(--muted)' }}
-              onClick={() => setCurrentFolderId(f.id)}
+              style={{ cursor: 'pointer', fontWeight: f.id === currentId ? 700 : 500, color: f.id === currentId ? 'var(--accent)' : 'var(--muted)' }}
+              onClick={() => onNavigate(f.id)}
             >{f.nama}</span>
           </span>
         ))}
@@ -411,10 +444,11 @@ export default function PaketList({ goTo, openPaket }) {
   function MovePickerModal() {
     if (!movePicker) return null
     const { type, item } = movePicker
+    const sisi = sisiItem({ tipe: type, data: item })
     const excluded = type === 'folder' ? idFolderTurunan(item.id) : new Set()
 
     function renderNode(parentId, depth) {
-      return anakFolder(parentId).filter(f => !excluded.has(f.id)).map(f => (
+      return anakFolder(parentId, sisi).filter(f => !excluded.has(f.id)).map(f => (
         <div key={f.id}>
           <button
             className="act-btn"
@@ -436,7 +470,7 @@ export default function PaketList({ goTo, openPaket }) {
           onClick={e => e.stopPropagation()}
         >
           <div style={{ fontWeight: 700, marginBottom: 10, color: 'var(--accent)', fontSize: 14 }}>
-            Pindahkan "{item.nama}" ke:
+            Pindahkan "{item.nama}" ke: <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(sisi {sisi === 'kiri' ? 'Buku' : 'Harian'})</span>
           </div>
           <button
             className="act-btn"
@@ -446,6 +480,60 @@ export default function PaketList({ goTo, openPaket }) {
           {renderNode(null, 0)}
           <button className="btn-dashed" style={{ marginTop: 10 }} onClick={() => setMovePicker(null)}>Batal</button>
         </div>
+      </div>
+    )
+  }
+
+  function PanelSisi({ sisi, label, currentId, setCurrentId, subfolder, paket, items, jejak }) {
+    return (
+      <div style={{ flex: 1, minWidth: 0, padding: sisi === 'kiri' ? '0 12px 0 0' : '0 0 0 12px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#7aaa8a', marginBottom: 8 }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <Breadcrumb currentId={currentId} jejak={jejak} onNavigate={setCurrentId} />
+          <div style={{ position: 'relative' }} data-tambah-menu>
+            <button
+              className="icon-btn" title="Tambah folder atau paket"
+              onClick={() => setTambahMenuSisi(s => s === sisi ? null : sisi)}
+              style={{ width: 34, height: 34, fontSize: 18, fontWeight: 700 }}
+            >⋯</button>
+            {tambahMenuSisi === sisi && (
+              <div
+                style={{
+                  position: 'absolute', top: '110%', right: 0, background: '#fff', borderRadius: 10,
+                  boxShadow: '0 6px 18px rgba(0,0,0,.15)', border: '1px solid #e5e5e5',
+                  minWidth: 170, zIndex: 20, overflow: 'hidden',
+                }}
+              >
+                <button
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                    padding: '10px 14px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 13,
+                  }}
+                  onClick={() => { setTambahMenuSisi(null); tambahFolder(sisi, currentId) }}
+                >📁 Folder baru</button>
+                <button
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                    padding: '10px 14px', border: 'none', borderTop: '1px solid #f0f0f0', background: '#fff', cursor: 'pointer', fontSize: 13,
+                  }}
+                  onClick={() => { setTambahMenuSisi(null); tambahPaketDiFolder(sisi, currentId) }}
+                >📚 Paket baru</button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {subfolder.length === 0 && paket.length === 0 && (
+          <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: '20px 0' }}>
+            {currentId === null ? 'Belum ada apa-apa di sini.' : 'Folder ini masih kosong.'}
+          </div>
+        )}
+
+        {items.map((item, idx) =>
+          item.tipe === 'folder'
+            ? <RowFolder key={item.data.id} f={item.data} idx={idx} itemsLen={items.length} sisi={sisi} showKolomToggle={currentId === null} onOpen={() => setCurrentId(item.data.id)} />
+            : <RowPaket key={item.data.id} p={item.data} idx={idx} itemsLen={items.length} sisi={sisi} showKolomToggle={currentId === null} />
+        )}
       </div>
     )
   }
@@ -485,81 +573,17 @@ export default function PaketList({ goTo, openPaket }) {
         {loading && <div style={{ textAlign: 'center', color: '#9abaa8', padding: 20 }}>Memuat...</div>}
 
         {!loading && !term && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-              <Breadcrumb />
-              <div style={{ position: 'relative' }} data-tambah-menu>
-                <button
-                  className="icon-btn" title="Tambah folder atau paket"
-                  onClick={() => setShowTambahMenu(s => !s)}
-                  style={{ width: 34, height: 34, fontSize: 18, fontWeight: 700 }}
-                >⋯</button>
-                {showTambahMenu && (
-                  <div
-                    style={{
-                      position: 'absolute', top: '110%', right: 0, background: '#fff', borderRadius: 10,
-                      boxShadow: '0 6px 18px rgba(0,0,0,.15)', border: '1px solid #e5e5e5',
-                      minWidth: 170, zIndex: 20, overflow: 'hidden',
-                    }}
-                  >
-                    <button
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-                        padding: '10px 14px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 13,
-                      }}
-                      onClick={() => { setShowTambahMenu(false); tambahFolder() }}
-                    >📁 Folder baru</button>
-                    <button
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-                        padding: '10px 14px', border: 'none', borderTop: '1px solid #f0f0f0', background: '#fff', cursor: 'pointer', fontSize: 13,
-                      }}
-                      onClick={() => { setShowTambahMenu(false); tambahPaketDiFolder() }}
-                    >📚 Paket baru</button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {subfolderIni.length === 0 && paketIni.length === 0 && (
-              <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: '20px 0' }}>
-                Folder ini masih kosong.
-              </div>
-            )}
-
-            {currentFolderId === null ? (
-              <div className="beranda-kolom-wrap">
-                <div className="beranda-kolom">
-                  <div className="beranda-kolom-label">📚 Buku</div>
-                  {itemsKiri.map((item, idx) =>
-                    item.tipe === 'folder'
-                      ? <RowFolder key={item.data.id} f={item.data} disableUp={idx === 0} disableDown={idx === itemsKiri.length - 1} showKolomToggle />
-                      : <RowPaket key={item.data.id} p={item.data} disableUp={idx === 0} disableDown={idx === itemsKiri.length - 1} showKolomToggle />
-                  )}
-                  {itemsKiri.length === 0 && (
-                    <div style={{ textAlign: 'center', color: '#c8ddc8', fontSize: 11, padding: '10px 0' }}>Kosong</div>
-                  )}
-                </div>
-                <div className="beranda-kolom">
-                  <div className="beranda-kolom-label">🎬 Harian</div>
-                  {itemsKanan.map((item, idx) =>
-                    item.tipe === 'folder'
-                      ? <RowFolder key={item.data.id} f={item.data} disableUp={idx === 0} disableDown={idx === itemsKanan.length - 1} showKolomToggle />
-                      : <RowPaket key={item.data.id} p={item.data} disableUp={idx === 0} disableDown={idx === itemsKanan.length - 1} showKolomToggle />
-                  )}
-                  {itemsKanan.length === 0 && (
-                    <div style={{ textAlign: 'center', color: '#c8ddc8', fontSize: 11, padding: '10px 0' }}>Kosong</div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              itemsIni.map((item, idx) =>
-                item.tipe === 'folder'
-                  ? <RowFolder key={item.data.id} f={item.data} disableUp={idx === 0} disableDown={idx === itemsIni.length - 1} />
-                  : <RowPaket key={item.data.id} p={item.data} disableUp={idx === 0} disableDown={idx === itemsIni.length - 1} />
-              )
-            )}
-          </>
+          <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start' }} className="panel-dua-sisi">
+            <PanelSisi
+              sisi="kiri" label="📚 Buku" currentId={folderKiri} setCurrentId={setFolderKiri}
+              subfolder={subfolderKiri} paket={paketKiri} items={itemsKiri} jejak={jejakKiri}
+            />
+            <div className="panel-divider" />
+            <PanelSisi
+              sisi="kanan" label="🎬 Harian" currentId={folderKanan} setCurrentId={setFolderKanan}
+              subfolder={subfolderKanan} paket={paketKanan} items={itemsKanan} jejak={jejakKanan}
+            />
+          </div>
         )}
 
         {!loading && term && (
