@@ -28,6 +28,10 @@ button, input, textarea { font-family: inherit; }
 }
 
 .cover-inner { max-width: 480px; width: 100%; }
+.paket-list-wide { max-width: 1200px; }
+@media (max-width: 640px) {
+  .paket-list-wide { max-width: 480px; }
+}
 
 .cover-head { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
 .cover-emoji { font-size: 30px; }
@@ -52,7 +56,7 @@ button, input, textarea { font-family: inherit; }
   font-size: 13px; outline: none; margin-bottom: 12px; box-sizing: border-box; background: #fff; color: var(--accent);
 }
 
-.panel-divider { width: 1.5px; align-self: stretch; background: var(--border-soft); flex-shrink: 0; margin: 0 2px; }
+.panel-divider { width: 1.5px; align-self: stretch; background: var(--border-soft); flex-shrink: 0; margin: 0 6px; }
 @media (max-width: 640px) {
   .panel-dua-sisi { flex-direction: column; }
   .panel-divider { width: 100%; height: 1.5px; margin: 18px 0; }
