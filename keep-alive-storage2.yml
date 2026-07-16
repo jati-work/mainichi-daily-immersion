@@ -1,0 +1,19 @@
+name: Ping Supabase Storage 2 (biar nggak ke-pause)
+
+on:
+  schedule:
+    # Jalan tiap Minggu & Rabu jam 00:00 UTC (~07:00 WIB).
+    # 2x seminggu = aman jauh di bawah batas 7 hari inactivity Supabase.
+    - cron: '0 0 * * 0,3'
+  workflow_dispatch: # biar bisa di-trigger manual dari tab "Actions" di GitHub buat testing
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Storage API project ke-2
+        run: |
+          curl -s -o /dev/null -w "Status: %{http_code}\n" \
+            "${{ secrets.SUPABASE_STORAGE2_URL }}/storage/v1/bucket/immersion-pdfs" \
+            -H "apikey: ${{ secrets.SUPABASE_STORAGE2_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_STORAGE2_KEY }}"
