@@ -486,7 +486,7 @@ export default function PaketList({ goTo, openPaket }) {
 
   function PanelSisi({ sisi, label, currentId, setCurrentId, subfolder, paket, items, jejak }) {
     return (
-      <div style={{ flex: 1, minWidth: 0, padding: sisi === 'kiri' ? '0 12px 0 0' : '0 0 0 12px' }}>
+      <div style={{ flex: 1, minWidth: 0, padding: sisi === 'kiri' ? '0 24px 0 0' : '0 0 0 24px' }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#7aaa8a', marginBottom: 8 }}>{label}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           <Breadcrumb currentId={currentId} jejak={jejak} onNavigate={setCurrentId} />
@@ -541,7 +541,7 @@ export default function PaketList({ goTo, openPaket }) {
   return (
     <div className="cover" style={{ justifyContent: 'flex-start', paddingTop: 60 }}>
       <button className="back-fab" onClick={() => goTo('cover')}>←</button>
-      <div className="cover-inner">
+      <div className="cover-inner paket-list-wide">
         <div className="cover-head">
           <div className="cover-emoji">📚</div>
           <div style={{ flex: 1 }}>
