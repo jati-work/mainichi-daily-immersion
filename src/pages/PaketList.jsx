@@ -334,14 +334,7 @@ export default function PaketList({ goTo, openPaket }) {
     else { setMovePicker(null); muatData() }
   }
 
-  // ---------- kiri/kanan (cuma dipakai buat pindahin item ROOT ke sisi lain) ----------
-  async function toggleKolom(item) {
-    const tabel = item.tipe === 'folder' ? 'folders' : 'paket'
-    const kolomBaru = (item.data.kolom || 'kiri') === 'kiri' ? 'kanan' : 'kiri'
-    const { error } = await supabase.from(tabel).update({ kolom: kolomBaru }).eq('id', item.data.id)
-    if (error) alert('Gagal pindah sisi: ' + error.message)
-    else muatData()
-  }
+  // ---------- kiri/kanan (ditentuin pas bikin folder/paket baru di panel yang sesuai) ----------
 
   const term = search.trim()
   const namaPaketDitemukan = useMemo(() => {
@@ -360,7 +353,7 @@ export default function PaketList({ goTo, openPaket }) {
   const itemsKanan = useMemo(() => itemsGabungan(folderKanan, 'kanan'), [subfolderKanan, paketKanan])
   const jejakKanan = useMemo(() => jejakBreadcrumb(folderKanan), [folders, folderKanan])
 
-  function RowFolder({ f, idx, itemsLen, sisi, onOpen, showKolomToggle }) {
+  function RowFolder({ f, idx, itemsLen, sisi, onOpen }) {
     const isiFolder = anakFolder(f.id, sisi).length
     const isiPaket = anakPaket(f.id, sisi).length
     return (
@@ -375,13 +368,6 @@ export default function PaketList({ goTo, openPaket }) {
             <span>{isiFolder > 0 ? `${isiFolder} folder, ` : ''}{isiPaket} paket</span>
           </div>
         </div>
-        {showKolomToggle && (
-          <button
-            className="icon-btn"
-            title={sisi === 'kiri' ? 'Pindah ke sisi Harian' : 'Pindah ke sisi Buku'}
-            onClick={() => toggleKolom({ tipe: 'folder', data: f })}
-          >{sisi === 'kiri' ? '➡️' : '⬅️'}</button>
-        )}
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'folder', item: f })}>➜</button>
         <button className="icon-btn" title="Rename folder" onClick={() => renameFolder(f)}>✏️</button>
         <button className="icon-btn danger" title="Hapus folder" onClick={() => hapusFolder(f)}>✕</button>
@@ -389,7 +375,7 @@ export default function PaketList({ goTo, openPaket }) {
     )
   }
 
-  function RowPaket({ p, idx, itemsLen, sisi, allowReorder = true, showKolomToggle }) {
+  function RowPaket({ p, idx, itemsLen, sisi, allowReorder = true }) {
     return (
       <div className="paket-row">
         <div className="urutan-col">
@@ -407,13 +393,6 @@ export default function PaketList({ goTo, openPaket }) {
             {p.adaIsiDiary && <span title="Ada catatan diary">📔</span>}
           </div>
         </div>
-        {showKolomToggle && (
-          <button
-            className="icon-btn"
-            title={sisi === 'kiri' ? 'Pindah ke sisi Harian' : 'Pindah ke sisi Buku'}
-            onClick={() => toggleKolom({ tipe: 'paket', data: p })}
-          >{sisi === 'kiri' ? '➡️' : '⬅️'}</button>
-        )}
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'paket', item: p })}>➜</button>
         <button className="icon-btn" title="Ubah nama" onClick={() => editPaket(p)}>✏️</button>
         <button className="icon-btn danger" title="Hapus paket" onClick={() => hapusPaket(p)}>✕</button>
@@ -531,8 +510,8 @@ export default function PaketList({ goTo, openPaket }) {
 
         {items.map((item, idx) =>
           item.tipe === 'folder'
-            ? <RowFolder key={item.data.id} f={item.data} idx={idx} itemsLen={items.length} sisi={sisi} showKolomToggle={currentId === null} onOpen={() => setCurrentId(item.data.id)} />
-            : <RowPaket key={item.data.id} p={item.data} idx={idx} itemsLen={items.length} sisi={sisi} showKolomToggle={currentId === null} />
+            ? <RowFolder key={item.data.id} f={item.data} idx={idx} itemsLen={items.length} sisi={sisi} onOpen={() => setCurrentId(item.data.id)} />
+            : <RowPaket key={item.data.id} p={item.data} idx={idx} itemsLen={items.length} sisi={sisi} />
         )}
       </div>
     )
