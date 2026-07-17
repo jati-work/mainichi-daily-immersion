@@ -26,12 +26,12 @@ function shuffle(arr) {
 // <Kartu> itu "komponen baru", jadi semua kartu ke-remount di tengah
 // proses drag -> browser otomatis batalin drag yang lagi jalan.
 function Kartu({
-  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, kalimat,
+  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
   return (
     <div
-      className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''} ${kalimat ? 'kalimat' : ''}`}
+      className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
       data-pindah-item
       draggable={pindahMode}
       onDragStart={onDragStart}
@@ -57,11 +57,51 @@ function Kartu({
         </div>
         <div className="card-back">
           <div>{k.arti}</div>
-          {kalimat && k.konteks && <div className="card-back-sub">📍 {k.konteks}</div>}
-          {kalimat && k.nuansa && <div className="card-back-sub">🎭 {k.nuansa}</div>}
         </div>
       </div>
       <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
+    </div>
+  )
+}
+
+// Versi "kertas lipat" (accordion) buat sisi Harian -- klik buat expand
+// ke bawah nampilin arti/konteks/nuansa, bukan flip 3D kayak kartu kata.
+// Lebih cocok buat kalimat/ekspresi yang lebih panjang.
+function BarisKalimat({
+  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode,
+  onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
+}) {
+  return (
+    <div
+      className={`baris-kalimat ${k.hafal ? 'hafal' : ''}`}
+      data-pindah-item
+      draggable={pindahMode}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      style={{
+        opacity: isDragging ? 0.4 : 1,
+        borderTop: isDragOver && dragOverPos === 'before' ? '3px solid #4a90d9' : '3px solid transparent',
+        borderBottom: isDragOver && dragOverPos === 'after' ? '3px solid #4a90d9' : '3px solid transparent',
+        boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
+      }}
+    >
+      <div className="baris-kalimat-atas" onClick={onClick} style={{ cursor: pindahMode ? 'grab' : 'pointer' }}>
+        <div className="baris-kalimat-jp">{k.jp}</div>
+        <button className="hafal-toggle-inline" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
+      </div>
+      <div
+        className="baris-kalimat-expand"
+        style={{ gridTemplateRows: isFlipped ? '1fr' : '0fr', borderTop: isFlipped ? '1px solid #e5efe5' : '1px solid transparent' }}
+      >
+        <div className="baris-kalimat-expand-inner">
+          <div className="baris-kalimat-arti">{k.arti}</div>
+          {k.konteks && <div className="card-back-sub">📍 {k.konteks}</div>}
+          {k.nuansa && <div className="card-back-sub">🎭 {k.nuansa}</div>}
+        </div>
+      </div>
     </div>
   )
 }
@@ -343,8 +383,9 @@ export default function PaketDetail({ paketId, goTo }) {
   }
 
   function renderKartu(k) {
+    const Komponen = sisiPaket === 'kanan' ? BarisKalimat : Kartu
     return (
-      <Kartu
+      <Komponen
         key={k.id}
         k={k}
         isFlipped={flipped.has(k.id)}
@@ -354,7 +395,6 @@ export default function PaketDetail({ paketId, goTo }) {
         pindahMode={pindahMode}
         editMode={editMode}
         hapusMode={hapusMode}
-        kalimat={sisiPaket === 'kanan'}
         onClick={() => klikKartu(k)}
         onToggleHafal={toggleHafal}
         onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -363,7 +403,9 @@ export default function PaketDetail({ paketId, goTo }) {
           if (pindahMode) {
             e.preventDefault(); e.stopPropagation()
             const rect = e.currentTarget.getBoundingClientRect()
-            const posisi = (e.clientX - rect.left) > rect.width / 2 ? 'after' : 'before'
+            const posisi = sisiPaket === 'kanan'
+              ? (e.clientY - rect.top) > rect.height / 2 ? 'after' : 'before'
+              : (e.clientX - rect.left) > rect.width / 2 ? 'after' : 'before'
             setDragOverId(k.id); setDragOverPos(posisi)
           }
         }}
@@ -657,14 +699,23 @@ async function hapusPdf() {
           {showTesBawah && (
             <div style={{ position: 'absolute', left: 0, top: 36, background: '#fff', border: '1.5px solid #ddd', borderRadius: 10, padding: 6, display: 'flex', flexDirection: 'column', gap: 4, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 20, minWidth: 200 }}>
               <div style={{ fontSize: 10, color: '#9abaa8', padding: '2px 6px', letterSpacing: '.06em', textTransform: 'uppercase' }}>Soal → Jawaban</div>
-              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kanji Dasar</button>
-              <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
-              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('bunshuu-kanji'); setShowTesBawah(false) }}>Bunshuu → Kanji Dasar</button>
-              <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
-              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-arti'); setShowTesBawah(false) }}>Kanji Dasar → Arti</button>
-              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-bunshuu'); setShowTesBawah(false) }}>Kanji Dasar → Bunshuu</button>
-              <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
-              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('natural-dasar'); setShowTesBawah(false) }}>Contoh Kalimat → Kanji Dasar</button>
+              {sisiPaket === 'kanan' ? (
+                <>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-arti'); setShowTesBawah(false) }}>Kalimat → Arti</button>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kalimat</button>
+                </>
+              ) : (
+                <>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kanji Dasar</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('bunshuu-kanji'); setShowTesBawah(false) }}>Bunshuu → Kanji Dasar</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-arti'); setShowTesBawah(false) }}>Kanji Dasar → Arti</button>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-bunshuu'); setShowTesBawah(false) }}>Kanji Dasar → Bunshuu</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('natural-dasar'); setShowTesBawah(false) }}>Contoh Kalimat → Kanji Dasar</button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -856,7 +907,9 @@ async function hapusPdf() {
               <>
                 <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{tes.idx + 1} / {tes.words.length} · ✓ {tes.correct} · ✗ {tes.wrong}</div>
                 <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>
-                  {{ 'arti-dasar': 'Tulis Kanji Dasarnya:', 'bunshuu-kanji': 'Tulis Kanji Dasarnya:', 'dasar-arti': 'Tulis Artinya:', 'dasar-bunshuu': 'Tulis Bunshuu-nya:', 'natural-dasar': 'Tulis Kanji Dasarnya:' }[tes.dir]}
+                  {sisiPaket === 'kanan'
+                    ? { 'arti-dasar': 'Tulis Kalimatnya:', 'dasar-arti': 'Tulis Artinya:' }[tes.dir]
+                    : { 'arti-dasar': 'Tulis Kanji Dasarnya:', 'bunshuu-kanji': 'Tulis Kanji Dasarnya:', 'dasar-arti': 'Tulis Artinya:', 'dasar-bunshuu': 'Tulis Bunshuu-nya:', 'natural-dasar': 'Tulis Kanji Dasarnya:' }[tes.dir]}
                 </div>
                 <div style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, fontWeight: 600, marginBottom: 14, textAlign: 'center' }}>
                   {{ 'arti-dasar': tes.words[tes.idx].arti, 'bunshuu-kanji': tes.words[tes.idx].bunshuu, 'dasar-arti': tes.words[tes.idx].jp, 'dasar-bunshuu': tes.words[tes.idx].jp, 'natural-dasar': tes.words[tes.idx].contoh_kalimat }[tes.dir]}
@@ -869,8 +922,8 @@ async function hapusPdf() {
                     textAlign: 'center', fontSize: 18,
                     fontFamily: ['arti-dasar','bunshuu-kanji','natural-dasar'].includes(tes.dir) ? "'Noto Serif JP', serif" : 'inherit',
                     borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : undefined,
-                    width: tes.dir === 'natural-dasar' ? '100%' : undefined,
-                    boxSizing: tes.dir === 'natural-dasar' ? 'border-box' : undefined,
+                    width: (tes.dir === 'natural-dasar' || (sisiPaket === 'kanan' && tes.dir === 'arti-dasar')) ? '100%' : undefined,
+                    boxSizing: (tes.dir === 'natural-dasar' || (sisiPaket === 'kanan' && tes.dir === 'arti-dasar')) ? 'border-box' : undefined,
                   }}
                 />
                 {tes.answered && tes.salah && (
