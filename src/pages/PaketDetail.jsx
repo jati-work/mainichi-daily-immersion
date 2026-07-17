@@ -26,12 +26,12 @@ function shuffle(arr) {
 // <Kartu> itu "komponen baru", jadi semua kartu ke-remount di tengah
 // proses drag -> browser otomatis batalin drag yang lagi jalan.
 function Kartu({
-  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode,
+  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, kalimat,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
   return (
     <div
-      className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
+      className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''} ${kalimat ? 'kalimat' : ''}`}
       data-pindah-item
       draggable={pindahMode}
       onDragStart={onDragStart}
@@ -57,6 +57,8 @@ function Kartu({
         </div>
         <div className="card-back">
           <div>{k.arti}</div>
+          {kalimat && k.konteks && <div className="card-back-sub">📍 {k.konteks}</div>}
+          {kalimat && k.nuansa && <div className="card-back-sub">🎭 {k.nuansa}</div>}
         </div>
       </div>
       <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
@@ -73,9 +75,12 @@ export default function PaketDetail({ paketId, goTo }) {
   const [arti, setArti] = useState('')
   const [contohKalimat, setContohKalimat] = useState('')
   const [bunshuu, setBunshuu] = useState('')
+  const [konteks, setKonteks] = useState('')
+  const [nuansa, setNuansa] = useState('')
   const [bagianInput, setBagianInput] = useState('')
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
+  const [sisiPaket, setSisiPaket] = useState('kiri') // 'kiri' = buku (kata+bunshuu), 'kanan' = harian (kalimat+konteks+nuansa)
   const jpInputRef = useRef(null)
   const bagianScrollRef = useRef(null)
   const [scrollState, setScrollState] = useState({ canLeft: false, canRight: false })
@@ -131,6 +136,7 @@ export default function PaketDetail({ paketId, goTo }) {
   async function muatSemua() {
     const { data: p } = await supabase.from('paket').select('*').eq('id', paketId).single()
     setPaket(p)
+    if (p) setSisiPaket(await tentukanSisiStorage(p))
     const { data: k } = await supabase.from('kata').select('*').eq('paket_id', paketId).order('created_at')
     setKataList(k || [])
   }
@@ -212,12 +218,14 @@ export default function PaketDetail({ paketId, goTo }) {
       const { error } = await supabase.from('kata').update({
         jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
+        konteks: konteks.trim(), nuansa: nuansa.trim(),
       }).eq('id', editingId)
       if (error) { alert('Gagal update: ' + error.message); return }
     } else {
       const { error } = await supabase.from('kata').insert({
         paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
-        contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(), urutan: Date.now(),
+        contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
+        konteks: konteks.trim(), nuansa: nuansa.trim(), urutan: Date.now(),
       })
       if (error) { alert('Gagal simpan: ' + error.message); return }
     }
@@ -231,13 +239,13 @@ export default function PaketDetail({ paketId, goTo }) {
   // reset isian kata doang, form-nya TETEP kebuka & bagian yang lagi
   // dipilih TETEP kesimpen (beda sama batalForm yang nutup form total)
   function resetFieldsKataSaja() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setKonteks(''); setNuansa('')
     setEditingId(null)
     setTimeout(() => jpInputRef.current?.focus(), 0)
   }
 
   function batalForm() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setBagianInput('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setKonteks(''); setNuansa(''); setBagianInput('')
     setEditingId(null)
     setShowForm(false)
   }
@@ -294,6 +302,8 @@ export default function PaketDetail({ paketId, goTo }) {
     setArti(k.arti)
     setContohKalimat(k.contoh_kalimat || '')
     setBunshuu(k.bunshuu || '')
+    setKonteks(k.konteks || '')
+    setNuansa(k.nuansa || '')
     setBagianInput(k.bagian || '')
     setShowForm(true)
   }
@@ -344,6 +354,7 @@ export default function PaketDetail({ paketId, goTo }) {
         pindahMode={pindahMode}
         editMode={editMode}
         hapusMode={hapusMode}
+        kalimat={sisiPaket === 'kanan'}
         onClick={() => klikKartu(k)}
         onToggleHafal={toggleHafal}
         onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -696,18 +707,37 @@ async function hapusPdf() {
             </select>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            <input ref={jpInputRef} tabIndex={1} placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && simpanKata()}
-              style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
-            <input tabIndex={3} placeholder="Contoh kalimat (opsional)" value={contohKalimat} onChange={e => setContohKalimat(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && simpanKata()}
-              style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
-            <input tabIndex={2} placeholder="Arti ID" value={arti} onChange={e => setArti(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && simpanKata()}
-              style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-            <input tabIndex={4} placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && simpanKata()}
-              style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+            {sisiPaket === 'kanan' ? (
+              <>
+                <input ref={jpInputRef} tabIndex={1} placeholder="Kalimat / ekspresi Jepang" value={jp} onChange={e => setJp(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", gridColumn: '1 / -1' }} />
+                <input tabIndex={2} placeholder="Arti" value={arti} onChange={e => setArti(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', gridColumn: '1 / -1' }} />
+                <input tabIndex={3} placeholder="Konteks / situasi (opsional)" value={konteks} onChange={e => setKonteks(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+                <input tabIndex={4} placeholder="Nuansa, misal: formal/kasual (opsional)" value={nuansa} onChange={e => setNuansa(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+              </>
+            ) : (
+              <>
+                <input ref={jpInputRef} tabIndex={1} placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
+                <input tabIndex={3} placeholder="Contoh kalimat (opsional)" value={contohKalimat} onChange={e => setContohKalimat(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
+                <input tabIndex={2} placeholder="Arti ID" value={arti} onChange={e => setArti(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+                <input tabIndex={4} placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+              </>
+            )}
             <div style={{ gridColumn: '1 / -1' }}>
               <button tabIndex={5} className="act-btn active" onClick={simpanKata}
                 style={{ width: '100%', padding: 10, fontWeight: 600 }}>{editingId ? 'Update' : 'Simpan'}</button>
@@ -719,7 +749,7 @@ async function hapusPdf() {
       <div className="grid-wrap">
         {!groupedView && (
           <div
-            className="card-grid"
+            className={`card-grid ${sisiPaket === "kanan" ? "kalimat" : ""}`}
             onDragOver={e => { if (pindahMode) e.preventDefault() }}
             onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, filterBagian !== 'all' ? filterBagian : '', null); setDraggingId(null); setDragOverId(null) }}
           >
@@ -730,7 +760,7 @@ async function hapusPdf() {
           <>
             {displayList.filter(k => !k.bagian).length > 0 && (
               <div
-                className="card-grid"
+                className={`card-grid ${sisiPaket === "kanan" ? "kalimat" : ""}`}
                 style={{ marginBottom: 10 }}
                 onDragOver={e => { if (pindahMode) e.preventDefault() }}
                 onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, '', null); setDraggingId(null); setDragOverId(null) }}
@@ -745,7 +775,7 @@ async function hapusPdf() {
                 <div key={b} style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#7aaa8a', padding: '8px 4px 4px' }}>{b}</div>
                   <div
-                    className="card-grid"
+                    className={`card-grid ${sisiPaket === "kanan" ? "kalimat" : ""}`}
                     onDragOver={e => { if (pindahMode) e.preventDefault() }}
                     onDrop={e => { e.preventDefault(); if (pindahMode && draggingId) pindahKata(draggingId, b, null); setDraggingId(null); setDragOverId(null) }}
                   >
