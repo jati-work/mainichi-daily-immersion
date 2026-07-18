@@ -280,41 +280,40 @@ export default function PaketDetail({ paketId, goTo }) {
   }
 
   // cek 1 atau lebih kata kandidat ke SELURUH database (jp Buku + kata_baru
-  // Harian), lintas kedua sisi. Dipake baik pas nambah kata di Buku (1
-  // kandidat = kata itu sendiri) maupun pas nge-tag kata_baru di Harian
-  // (banyak kandidat sekaligus, 1 per kata yang ditag).
+  // Harian), lintas kedua sisi. Ngembaliin SEMUA match yang ketemu (bisa
+  // lebih dari 1 paket), bukan cuma yang pertama -- biar reminder-nya bisa
+  // nunjukin semua tempat kata itu udah pernah dicatet.
   async function cekDuplikatKata(kandidatList, excludeId = null) {
     const kandidat = kandidatList.map(normalisasiJP).filter(Boolean)
-    if (kandidat.length === 0) return null
+    if (kandidat.length === 0) return []
     const { data } = await supabase.from('kata').select('id, jp, kata_baru, paket:paket_id (nama, tanggal)')
-    if (!data) return null
+    if (!data) return []
+    const hasil = []
+    const sudahAda = new Set()
     for (const row of data) {
       if (row.id === excludeId) continue
       const normJp = normalisasiJP(row.jp)
       if (kandidat.includes(normJp)) {
-        return { kata: row.jp, nama: row.paket?.nama, tanggal: row.paket?.tanggal }
+        const key = `${row.jp}|${row.paket?.nama}`
+        if (!sudahAda.has(key)) { sudahAda.add(key); hasil.push({ kata: row.jp, nama: row.paket?.nama, tanggal: row.paket?.tanggal }) }
       }
       if (row.kata_baru) {
         const tagsRow = row.kata_baru.split(',').map(normalisasiJP).filter(Boolean)
-        const ketemu = tagsRow.find(t => kandidat.includes(t))
-        if (ketemu) return { kata: ketemu, nama: row.paket?.nama, tanggal: row.paket?.tanggal }
+        tagsRow.forEach(t => {
+          if (kandidat.includes(t)) {
+            const key = `${t}|${row.paket?.nama}`
+            if (!sudahAda.has(key)) { sudahAda.add(key); hasil.push({ kata: t, nama: row.paket?.nama, tanggal: row.paket?.tanggal }) }
+          }
+        })
       }
     }
-    return null
+    return hasil
   }
 
-  async function simpanKata() {
-    if (!jp.trim() || !arti.trim()) { alert('Isi kata JP dan artinya dulu ya!'); return }
-    // sisi Harian: cek kalimatnya sendiri (persis sama = block) SEKALIGUS
-    // tiap kata di kata_baru (dicek ke Buku + Harian lain).
-    // sisi Buku: cek kata itu sendiri kayak biasa.
-    const kandidat = sisiPaket === 'kanan'
-      ? [jp.trim(), ...kataBaruInput.split(',').map(s => s.trim()).filter(Boolean)]
-      : [jp.trim()]
-    if (kandidat.length > 0) {
-      const ketemu = await cekDuplikatKata(kandidat, editingId)
-      if (ketemu) { setDup(ketemu); return }
-    }
+  // nulis ke DB doang, tanpa cek duplikat -- dipanggil dari simpanKata()
+  // kalau lolos cek, ATAU dari tombol "Tetep Simpan" pas user override
+  // warning kata (kalimat sama persis tetep TIDAK bisa di-override).
+  async function simpanKataAktual() {
     if (editingId) {
       const { error } = await supabase.from('kata').update({
         jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
@@ -335,6 +334,31 @@ export default function PaketDetail({ paketId, goTo }) {
     // buka form & pilih bagian dari awal lagi
     resetFieldsKataSaja()
     muatSemua()
+  }
+
+  async function simpanKata() {
+    if (!jp.trim() || !arti.trim()) { alert('Isi kata JP dan artinya dulu ya!'); return }
+
+    if (sisiPaket === 'kanan') {
+      // 1. kalimat persis sama -> HARD BLOCK, gak ada opsi lanjut (nggak
+      // ada gunanya nyatet ulang kalimat yang sama persis)
+      const dupKalimat = await cekDuplikatKata([jp.trim()], editingId)
+      if (dupKalimat.length > 0) { setDup({ mode: 'blok', matches: dupKalimat }); return }
+
+      // 2. kata di kata_baru -> SOFT WARNING, boleh di-override (kadang
+      // emang sengaja belajar bentuk/konteks baru dari kata yang sama)
+      const kandidatKata = kataBaruInput.split(',').map(s => s.trim()).filter(Boolean)
+      if (kandidatKata.length > 0) {
+        const dupKata = await cekDuplikatKata(kandidatKata, editingId)
+        if (dupKata.length > 0) { setDup({ mode: 'warn', matches: dupKata }); return }
+      }
+    } else {
+      // sisi Buku: kata itu sendiri -> tetep HARD BLOCK kayak semula
+      const dupKata = await cekDuplikatKata([jp.trim()], editingId)
+      if (dupKata.length > 0) { setDup({ mode: 'blok', matches: dupKata }); return }
+    }
+
+    await simpanKataAktual()
   }
 
   // reset isian kata doang, form-nya TETEP kebuka & bagian yang lagi
@@ -915,14 +939,29 @@ async function hapusPdf() {
 
       <div className={`modal-overlay ${dup ? 'open' : ''}`}>
         <div className="modal-box">
-          <div className="modal-icon">🔁</div>
-          <div className="modal-title">Kata Ini Udah Pernah Dicatat!</div>
+          <div className="modal-icon">{dup?.mode === 'warn' ? '⚠️' : '🔁'}</div>
+          <div className="modal-title">{dup?.mode === 'warn' ? 'Kata Ini Udah Pernah Dicatat' : 'Kalimat Ini Udah Pernah Dicatat!'}</div>
           <div className="modal-desc">
-            <b>{dup?.kata}</b> udah ada di paket <b>{dup?.nama}{dup?.tanggal ? ` (${dup.tanggal})` : ''}</b>.<br /><br />
-            Ayo inget-inget! Ini active recall — coba diingat lagi artinya sebelum buka paket lamanya. 🌱
+            {dup?.matches?.length === 1 ? (
+              <><b>{dup.matches[0].kata}</b> udah ada di paket <b>{dup.matches[0].nama}{dup.matches[0].tanggal ? ` (${dup.matches[0].tanggal})` : ''}</b>.</>
+            ) : (
+              <>
+                <b>{dup?.matches?.[0]?.kata}</b> udah ada di beberapa paket:
+                <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+                  {dup?.matches?.map((m, i) => <li key={i}><b>{m.nama}</b>{m.tanggal ? ` (${m.tanggal})` : ''}</li>)}
+                </ul>
+              </>
+            )}
+            <br /><br />
+            {dup?.mode === 'warn'
+              ? 'Kan udah pernah dipelajarin semua bentuknya. Kalo emang sengaja mau catet konteks/nuansa baru dari kata ini, tetep boleh lanjut simpen. 🌱'
+              : 'Ayo inget-inget! Ini active recall — coba diingat lagi artinya sebelum buka paket lamanya. 🌱'}
           </div>
           <div className="modal-btns">
-            <button className="confirm" onClick={() => setDup(null)}>Oke, Saya Ingat</button>
+            <button className={dup?.mode === 'warn' ? '' : 'confirm'} onClick={() => setDup(null)}>Oke, Saya Ingat</button>
+            {dup?.mode === 'warn' && (
+              <button className="confirm" onClick={async () => { setDup(null); await simpanKataAktual() }}>Tetep Simpan</button>
+            )}
           </div>
         </div>
       </div>
