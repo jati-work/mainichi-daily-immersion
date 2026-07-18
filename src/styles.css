@@ -153,10 +153,17 @@ button, input, textarea { font-family: inherit; }
   display: grid; transition: grid-template-rows .25s ease;
 }
 .baris-kalimat-expand-inner { overflow: hidden; }
-.baris-kalimat-arti {
-  font-size: clamp(11px,1.4vw,13px); line-height: 1.45; color: #2c4a2c; padding: 12px 16px 4px;
+.baris-kalimat-blok { padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+.baris-kalimat-atas .baris-kalimat-blok { padding: 0; flex: 1; }
+.baris-kalimat-arti-inline { font-size: clamp(12px,1.5vw,14px); line-height: 1.4; color: #2c4a2c; }
+.baris-kalimat-sub-inline { display: flex; gap: 10px; flex-wrap: wrap; }
+.badge-kata-baru-wrap { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+.badge-kata-baru {
+  font-family: 'Noto Serif JP', serif; font-size: 11px; padding: 2px 8px; border-radius: 99px;
+  background: #eef3ee; color: #4a7a5a; border: 1px solid #dbe8db;
 }
-.card-back-sub { font-size: 10px; color: #2c6a3a; opacity: .85; margin: 0 16px 10px; }
+.badge-kata-baru.hafal { background: #4caf50; color: #fff; border-color: #4caf50; }
+.baris-kalimat-sub-inline span { font-size: 10px; color: #2c6a3a; opacity: .85; }
 
 .card.hafal .card-inner { opacity: .3; }
 
