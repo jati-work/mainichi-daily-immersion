@@ -279,6 +279,18 @@ export default function PaketDetail({ paketId, goTo }) {
     muatSemua()
   }
 
+  // cek exact-match kalimat penuh, KHUSUS ke field jp doang (bukan
+  // kata_baru) -- dipake buat block total kalimat yang persis sama.
+  async function cekKalimatSama(jpText, excludeId = null) {
+    const norm = normalisasiJP(jpText)
+    if (!norm) return null
+    const { data } = await supabase.from('kata').select('id, jp, paket:paket_id (nama, tanggal)')
+    if (!data) return null
+    const match = data.find(row => row.id !== excludeId && normalisasiJP(row.jp) === norm)
+    if (!match) return null
+    return { kata: match.jp, nama: match.paket?.nama, tanggal: match.paket?.tanggal }
+  }
+
   // cek 1 atau lebih kata kandidat ke SELURUH database (jp Buku + kata_baru
   // Harian), lintas kedua sisi. Ngembaliin SEMUA match yang ketemu (bisa
   // lebih dari 1 paket), bukan cuma yang pertama -- biar reminder-nya bisa
@@ -341,9 +353,12 @@ export default function PaketDetail({ paketId, goTo }) {
 
     if (sisiPaket === 'kanan') {
       // 1. kalimat persis sama -> HARD BLOCK, gak ada opsi lanjut (nggak
-      // ada gunanya nyatet ulang kalimat yang sama persis)
-      const dupKalimat = await cekDuplikatKata([jp.trim()], editingId)
-      if (dupKalimat.length > 0) { setDup({ mode: 'blok', matches: dupKalimat }); return }
+      // ada gunanya nyatet ulang kalimat yang sama persis). Ini cuma cek
+      // ke field jp -- kalimat kamu KEBETULAN sama kayak salah satu badge
+      // kata di kalimat lain itu BUKAN kasus ini, itu tanggung jawab
+      // pengecekan kata_baru di bawah.
+      const dupKalimat = await cekKalimatSama(jp.trim(), editingId)
+      if (dupKalimat) { setDup({ mode: 'blok', matches: [dupKalimat] }); return }
 
       // 2. kata di kata_baru -> SOFT WARNING, boleh di-override (kadang
       // emang sengaja belajar bentuk/konteks baru dari kata yang sama)
