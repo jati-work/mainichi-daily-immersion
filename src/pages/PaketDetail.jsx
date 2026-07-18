@@ -305,8 +305,11 @@ export default function PaketDetail({ paketId, goTo }) {
 
   async function simpanKata() {
     if (!jp.trim() || !arti.trim()) { alert('Isi kata JP dan artinya dulu ya!'); return }
+    // sisi Harian: cek kalimatnya sendiri (persis sama = block) SEKALIGUS
+    // tiap kata di kata_baru (dicek ke Buku + Harian lain).
+    // sisi Buku: cek kata itu sendiri kayak biasa.
     const kandidat = sisiPaket === 'kanan'
-      ? kataBaruInput.split(',').map(s => s.trim()).filter(Boolean)
+      ? [jp.trim(), ...kataBaruInput.split(',').map(s => s.trim()).filter(Boolean)]
       : [jp.trim()]
     if (kandidat.length > 0) {
       const ketemu = await cekDuplikatKata(kandidat, editingId)
@@ -751,12 +754,12 @@ async function hapusPdf() {
       <div className="actions">
         <button className={`act-btn ${kartuMode === 'buka' ? 'active' : ''}`} onClick={() => setKartu('buka')}>Buka semua ▾</button>
         <button className={`act-btn ${kartuMode === 'tutup' ? 'active' : ''}`} onClick={() => setKartu('tutup')}>Tutup semua ▴</button>
-        <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
-        <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
-        <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
         {sisiPaket === 'kanan' && (
           <button className={`act-btn ${modeArtiDulu ? 'active' : ''}`} onClick={() => setModeArtiDulu(m => !m)}>🔄 Arti dulu</button>
         )}
+        <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
+        <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
+        <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
         <div style={{ position: 'relative' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowTesBawah(s => !s)}>📝 Tes</button>
           {showTesBawah && (
@@ -915,7 +918,7 @@ async function hapusPdf() {
           <div className="modal-icon">🔁</div>
           <div className="modal-title">Kata Ini Udah Pernah Dicatat!</div>
           <div className="modal-desc">
-            Kata <b>{dup?.kata}</b> udah ada di paket <b>{dup?.nama}{dup?.tanggal ? ` (${dup.tanggal})` : ''}</b>.<br /><br />
+            <b>{dup?.kata}</b> udah ada di paket <b>{dup?.nama}{dup?.tanggal ? ` (${dup.tanggal})` : ''}</b>.<br /><br />
             Ayo inget-inget! Ini active recall — coba diingat lagi artinya sebelum buka paket lamanya. 🌱
           </div>
           <div className="modal-btns">
