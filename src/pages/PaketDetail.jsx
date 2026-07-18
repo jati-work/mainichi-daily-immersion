@@ -368,9 +368,12 @@ export default function PaketDetail({ paketId, goTo }) {
         if (dupKata.length > 0) { setDup({ mode: 'warn', matches: dupKata }); return }
       }
     } else {
-      // sisi Buku: kata itu sendiri -> tetep HARD BLOCK kayak semula
+      // sisi Buku: kata itu sendiri -> SOFT WARNING juga (bukan block),
+      // soalnya alasan belajarnya beda: di Buku belajar bunshuu-nya, di
+      // Harian belajar nuansa dari kalimatnya -- keduanya valid meski
+      // kata-nya sama
       const dupKata = await cekDuplikatKata([jp.trim()], editingId)
-      if (dupKata.length > 0) { setDup({ mode: 'blok', matches: dupKata }); return }
+      if (dupKata.length > 0) { setDup({ mode: 'warn', matches: dupKata }); return }
     }
 
     await simpanKataAktual()
