@@ -45,6 +45,10 @@ export default function PaketList({ goTo, openPaket }) {
   useEffect(() => { muatData() }, [])
 
   // ----- kamus: cari kata (kanji/kana atau arti) di semua paket -----
+  // hasilnya bisa 2 jenis: (1) match normal di jp/arti -> tampil apa
+  // adanya, (2) match di kata_baru (kata yang ditag dalem kalimat Harian,
+  // nggak punya arti sendiri) -> ditampilin sebagai "kata badge" dengan
+  // kalimat asal + artinya sebagai konteks di bawahnya.
   useEffect(() => {
     const term = search.trim()
     if (!term) { setKamusHasil([]); setKamusLoading(false); return }
@@ -52,10 +56,23 @@ export default function PaketList({ goTo, openPaket }) {
     const timer = setTimeout(async () => {
       const { data, error } = await supabase
         .from('kata')
-        .select('id, jp, arti, paket:paket_id (id, nama)')
-        .or(`jp.ilike.%${term}%,arti.ilike.%${term}%`)
+        .select('id, jp, arti, kata_baru, paket:paket_id (id, nama)')
+        .or(`jp.ilike.%${term}%,arti.ilike.%${term}%,kata_baru.ilike.%${term}%`)
         .limit(50)
-      if (!error) setKamusHasil(data || [])
+      if (!error) {
+        const termLower = term.toLowerCase()
+        const hasil = []
+        ;(data || []).forEach(row => {
+          const cocokNormal = row.jp?.toLowerCase().includes(termLower) || row.arti?.toLowerCase().includes(termLower)
+          if (cocokNormal) hasil.push({ id: row.id, tipe: 'normal', jp: row.jp, arti: row.arti, paket: row.paket })
+          if (row.kata_baru) {
+            row.kata_baru.split(',').map(w => w.trim()).filter(Boolean)
+              .filter(w => w.toLowerCase().includes(termLower))
+              .forEach(w => hasil.push({ id: `${row.id}-${w}`, tipe: 'badge', kataBadge: w, jp: row.jp, arti: row.arti, paket: row.paket }))
+          }
+        })
+        setKamusHasil(hasil)
+      }
       setKamusLoading(false)
     }, 300)
     return () => clearTimeout(timer)
@@ -613,12 +630,27 @@ export default function PaketList({ goTo, openPaket }) {
                     onClick={() => k.paket && openPaket(k.paket.id)}
                   >
                     <div className="info">
-                      <div className="nama">
-                        <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.jp}</span>
-                      </div>
-                      <div className="meta">
-                        <span>{k.arti}</span>
-                      </div>
+                      {k.tipe === 'badge' ? (
+                        <>
+                          <div className="nama">
+                            <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.kataBadge}</span>
+                          </div>
+                          <div className="meta" style={{ display: 'block' }}>
+                            <span>muncul di kalimat: </span>
+                            <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{k.jp}</span>
+                            <span> — {k.arti}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="nama">
+                            <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.jp}</span>
+                          </div>
+                          <div className="meta">
+                            <span>{k.arti}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
