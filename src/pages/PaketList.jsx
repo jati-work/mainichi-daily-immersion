@@ -122,15 +122,16 @@ export default function PaketList({ goTo, openPaket }) {
     try {
       const { data, error } = await supabase
         .from('kata')
-        .select('jp, arti, paket:paket_id (nama, urutan)')
+        .select('jp, arti, kata_baru, paket:paket_id (nama, urutan, folder_id, kolom)')
         .eq('hafal', true)
       if (error) throw error
-      if (!data || data.length === 0) { alert('Belum ada kata yang hafal nih!'); setExportLoading(false); return }
+      const items = data ? flattenExportItems(data) : []
+      if (items.length === 0) { alert('Belum ada kata yang hafal nih!'); setExportLoading(false); return }
 
       const byPaket = {}
-      data.forEach(row => {
-        const nama = row.paket?.nama || 'Tanpa paket'
-        const urutan = row.paket?.urutan ?? 0
+      items.forEach(row => {
+        const nama = row.nama || 'Tanpa paket'
+        const urutan = row.urutan ?? 0
         if (!byPaket[nama]) byPaket[nama] = { urutan, items: [] }
         byPaket[nama].items.push(row)
       })
@@ -142,7 +143,7 @@ export default function PaketList({ goTo, openPaket }) {
       const wrap = document.createElement('div')
       wrap.style.cssText = 'position:fixed; left:-9999px; top:0; width:700px; background:#fff; padding:32px; font-family: "DM Sans", sans-serif; color:#1a1a1a;'
       let html = `<div style="font-family:'Noto Serif JP', serif; font-size:20px; font-weight:700; color:#2d6a4a; margin-bottom:2px;">Kosakata Immersion — Daftar Hafalan</div>
-        <div style="font-size:11px; color:#7aaa8a; margin-bottom:20px;">Diekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${data.length} kata</div>`
+        <div style="font-size:11px; color:#7aaa8a; margin-bottom:20px;">Diekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${items.length} kata</div>`
       pakets.forEach(([nama, { items }]) => {
         html += `<div style="font-size:13px; font-weight:700; color:#1a1a1a; margin-top:18px; margin-bottom:8px; border-bottom:1.5px solid #b8d8b8; padding-bottom:4px;">${nama}</div>`
         items.forEach(it => {
@@ -184,27 +185,50 @@ export default function PaketList({ goTo, openPaket }) {
     setExportLoading(false)
   }
 
+  // ubah hasil query kata (hafal=true) jadi list item siap-export.
+  // Buku: 1 baris = 1 kata (jp+arti) kayak biasa.
+  // Harian: 1 baris kalimat bisa jadi BEBERAPA item (1 per kata di
+  // kata_baru), tanpa arti (soalnya artinya nempel di kalimat, bukan per
+  // kata). Kalimat tanpa kata_baru (grammar-only) di-skip, nggak nyumbang
+  // apa-apa ke daftar kata.
+  function flattenExportItems(data) {
+    const hasil = []
+    data.forEach(row => {
+      const sisi = sisiItem({ tipe: 'paket', data: { folder_id: row.paket?.folder_id ?? null, kolom: row.paket?.kolom } })
+      if (sisi === 'kanan') {
+        if (!row.kata_baru) return
+        row.kata_baru.split(',').map(w => w.trim()).filter(Boolean).forEach(w => {
+          hasil.push({ jp: w, arti: '', nama: row.paket?.nama, urutan: row.paket?.urutan })
+        })
+      } else {
+        hasil.push({ jp: row.jp, arti: row.arti, nama: row.paket?.nama, urutan: row.paket?.urutan })
+      }
+    })
+    return hasil
+  }
+
   async function exportTxtHafalan() {
     const { data, error } = await supabase
       .from('kata')
-      .select('jp, arti, paket:paket_id (nama, urutan)')
+      .select('jp, arti, kata_baru, paket:paket_id (nama, urutan, folder_id, kolom)')
       .eq('hafal', true)
     if (error) { alert('Gagal ambil data: ' + error.message); return }
-    if (!data || data.length === 0) { alert('Belum ada kata yang hafal nih!'); return }
+    const items = data ? flattenExportItems(data) : []
+    if (items.length === 0) { alert('Belum ada kata yang hafal nih!'); return }
 
     const byPaket = {}
-    data.forEach(row => {
-      const nama = row.paket?.nama || 'Tanpa paket'
-      const urutan = row.paket?.urutan ?? 0
+    items.forEach(row => {
+      const nama = row.nama || 'Tanpa paket'
+      const urutan = row.urutan ?? 0
       if (!byPaket[nama]) byPaket[nama] = { urutan, items: [] }
       byPaket[nama].items.push(row)
     })
     const pakets = Object.entries(byPaket).sort((a, b) => a[1].urutan - b[1].urutan)
 
-    let txt = `Kosakata Immersion — Daftar Hafalan\nDiekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${data.length} kata\n\n`
+    let txt = `Kosakata Immersion — Daftar Hafalan\nDiekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${items.length} kata\n\n`
     pakets.forEach(([nama, { items }]) => {
       txt += `**${nama}**\n`
-      items.forEach(it => { txt += `${it.jp} — ${it.arti}\n` })
+      items.forEach(it => { txt += it.arti ? `${it.jp} — ${it.arti}\n` : `${it.jp}\n` })
       txt += '\n'
     })
 
