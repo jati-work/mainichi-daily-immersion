@@ -67,10 +67,49 @@ function Kartu({
 // Versi "kertas lipat" (accordion) buat sisi Harian -- klik buat expand
 // ke bawah nampilin arti/konteks/nuansa, bukan flip 3D kayak kartu kata.
 // Lebih cocok buat kalimat/ekspresi yang lebih panjang.
+function BadgeKataBaru({ k }) {
+  if (!k.kata_baru) return null
+  const words = k.kata_baru.split(',').map(w => w.trim()).filter(Boolean)
+  if (words.length === 0) return null
+  return (
+    <div className="badge-kata-baru-wrap">
+      {words.map((w, i) => (
+        <span key={i} className={`badge-kata-baru ${k.hafal ? 'hafal' : ''}`}>{w}</span>
+      ))}
+    </div>
+  )
+}
+
+// blok "JP" = kalimat Jepang + badge kata_baru yang ditag di kalimat itu
+function BlokJp({ k }) {
+  return (
+    <div className="baris-kalimat-blok">
+      <div className="baris-kalimat-jp">{k.jp}</div>
+      <BadgeKataBaru k={k} />
+    </div>
+  )
+}
+// blok "arti" = arti + konteks/nuansa (kalau diisi)
+function BlokArti({ k }) {
+  return (
+    <div className="baris-kalimat-blok">
+      <div className="baris-kalimat-arti-inline">{k.arti}</div>
+      {(k.konteks || k.nuansa) && (
+        <div className="baris-kalimat-sub-inline">
+          {k.konteks && <span>📍 {k.konteks}</span>}
+          {k.nuansa && <span>🎭 {k.nuansa}</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BarisKalimat({
-  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode,
+  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, modeArtiDulu,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
+  const depan = modeArtiDulu ? <BlokArti k={k} /> : <BlokJp k={k} />
+  const belakang = modeArtiDulu ? <BlokJp k={k} /> : <BlokArti k={k} />
   return (
     <div
       className={`baris-kalimat ${k.hafal ? 'hafal' : ''}`}
@@ -89,7 +128,7 @@ function BarisKalimat({
       }}
     >
       <div className="baris-kalimat-atas" onClick={onClick} style={{ cursor: pindahMode ? 'grab' : 'pointer' }}>
-        <div className="baris-kalimat-jp">{k.jp}</div>
+        {depan}
         <button className="hafal-toggle-inline" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
       </div>
       <div
@@ -97,9 +136,7 @@ function BarisKalimat({
         style={{ gridTemplateRows: isFlipped ? '1fr' : '0fr', borderTop: isFlipped ? '1px solid #e5efe5' : '1px solid transparent' }}
       >
         <div className="baris-kalimat-expand-inner">
-          <div className="baris-kalimat-arti">{k.arti}</div>
-          {k.konteks && <div className="card-back-sub">📍 {k.konteks}</div>}
-          {k.nuansa && <div className="card-back-sub">🎭 {k.nuansa}</div>}
+          {belakang}
         </div>
       </div>
     </div>
@@ -117,6 +154,8 @@ export default function PaketDetail({ paketId, goTo }) {
   const [bunshuu, setBunshuu] = useState('')
   const [konteks, setKonteks] = useState('')
   const [nuansa, setNuansa] = useState('')
+  const [kataBaruInput, setKataBaruInput] = useState('')
+  const [modeArtiDulu, setModeArtiDulu] = useState(false)
   const [bagianInput, setBagianInput] = useState('')
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -240,32 +279,51 @@ export default function PaketDetail({ paketId, goTo }) {
     muatSemua()
   }
 
-  async function cekDuplikat(jpText, excludeId = null) {
-    const norm = normalisasiJP(jpText)
-    if (!norm) return null
-    const { data } = await supabase.from('kata').select('id, jp, paket:paket_id (nama, tanggal)')
+  // cek 1 atau lebih kata kandidat ke SELURUH database (jp Buku + kata_baru
+  // Harian), lintas kedua sisi. Dipake baik pas nambah kata di Buku (1
+  // kandidat = kata itu sendiri) maupun pas nge-tag kata_baru di Harian
+  // (banyak kandidat sekaligus, 1 per kata yang ditag).
+  async function cekDuplikatKata(kandidatList, excludeId = null) {
+    const kandidat = kandidatList.map(normalisasiJP).filter(Boolean)
+    if (kandidat.length === 0) return null
+    const { data } = await supabase.from('kata').select('id, jp, kata_baru, paket:paket_id (nama, tanggal)')
     if (!data) return null
-    const match = data.find(row => row.id !== excludeId && normalisasiJP(row.jp) === norm)
-    if (!match) return null
-    return { jp: match.jp, nama: match.paket?.nama, tanggal: match.paket?.tanggal }
+    for (const row of data) {
+      if (row.id === excludeId) continue
+      const normJp = normalisasiJP(row.jp)
+      if (kandidat.includes(normJp)) {
+        return { kata: row.jp, nama: row.paket?.nama, tanggal: row.paket?.tanggal }
+      }
+      if (row.kata_baru) {
+        const tagsRow = row.kata_baru.split(',').map(normalisasiJP).filter(Boolean)
+        const ketemu = tagsRow.find(t => kandidat.includes(t))
+        if (ketemu) return { kata: ketemu, nama: row.paket?.nama, tanggal: row.paket?.tanggal }
+      }
+    }
+    return null
   }
 
   async function simpanKata() {
     if (!jp.trim() || !arti.trim()) { alert('Isi kata JP dan artinya dulu ya!'); return }
-    const ketemu = await cekDuplikat(jp, editingId)
-    if (ketemu) { setDup(ketemu); return }
+    const kandidat = sisiPaket === 'kanan'
+      ? kataBaruInput.split(',').map(s => s.trim()).filter(Boolean)
+      : [jp.trim()]
+    if (kandidat.length > 0) {
+      const ketemu = await cekDuplikatKata(kandidat, editingId)
+      if (ketemu) { setDup(ketemu); return }
+    }
     if (editingId) {
       const { error } = await supabase.from('kata').update({
         jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
-        konteks: konteks.trim(), nuansa: nuansa.trim(),
+        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: kataBaruInput.trim(),
       }).eq('id', editingId)
       if (error) { alert('Gagal update: ' + error.message); return }
     } else {
       const { error } = await supabase.from('kata').insert({
         paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
-        konteks: konteks.trim(), nuansa: nuansa.trim(), urutan: Date.now(),
+        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: kataBaruInput.trim(), urutan: Date.now(),
       })
       if (error) { alert('Gagal simpan: ' + error.message); return }
     }
@@ -279,13 +337,13 @@ export default function PaketDetail({ paketId, goTo }) {
   // reset isian kata doang, form-nya TETEP kebuka & bagian yang lagi
   // dipilih TETEP kesimpen (beda sama batalForm yang nutup form total)
   function resetFieldsKataSaja() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setKonteks(''); setNuansa('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setKonteks(''); setNuansa(''); setKataBaruInput('')
     setEditingId(null)
     setTimeout(() => jpInputRef.current?.focus(), 0)
   }
 
   function batalForm() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setKonteks(''); setNuansa(''); setBagianInput('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setBagianInput('')
     setEditingId(null)
     setShowForm(false)
   }
@@ -344,6 +402,7 @@ export default function PaketDetail({ paketId, goTo }) {
     setBunshuu(k.bunshuu || '')
     setKonteks(k.konteks || '')
     setNuansa(k.nuansa || '')
+    setKataBaruInput(k.kata_baru || '')
     setBagianInput(k.bagian || '')
     setShowForm(true)
   }
@@ -395,6 +454,7 @@ export default function PaketDetail({ paketId, goTo }) {
         pindahMode={pindahMode}
         editMode={editMode}
         hapusMode={hapusMode}
+        modeArtiDulu={modeArtiDulu}
         onClick={() => klikKartu(k)}
         onToggleHafal={toggleHafal}
         onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -694,6 +754,9 @@ async function hapusPdf() {
         <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
         <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
         <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
+        {sisiPaket === 'kanan' && (
+          <button className={`act-btn ${modeArtiDulu ? 'active' : ''}`} onClick={() => setModeArtiDulu(m => !m)}>🔄 Arti dulu</button>
+        )}
         <div style={{ position: 'relative' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowTesBawah(s => !s)}>📝 Tes</button>
           {showTesBawah && (
@@ -766,10 +829,13 @@ async function hapusPdf() {
                 <input tabIndex={2} placeholder="Arti" value={arti} onChange={e => setArti(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && simpanKata()}
                   style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', gridColumn: '1 / -1' }} />
-                <input tabIndex={3} placeholder="Konteks / situasi (opsional)" value={konteks} onChange={e => setKonteks(e.target.value)}
+                <input tabIndex={3} placeholder="Kata baru yang dipelajari, pisah koma (opsional)" value={kataBaruInput} onChange={e => setKataBaruInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", gridColumn: '1 / -1' }} />
+                <input tabIndex={4} placeholder="Konteks / situasi (opsional)" value={konteks} onChange={e => setKonteks(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && simpanKata()}
                   style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-                <input tabIndex={4} placeholder="Nuansa, misal: formal/kasual (opsional)" value={nuansa} onChange={e => setNuansa(e.target.value)}
+                <input tabIndex={5} placeholder="Nuansa, misal: formal/kasual (opsional)" value={nuansa} onChange={e => setNuansa(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && simpanKata()}
                   style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
               </>
@@ -790,7 +856,7 @@ async function hapusPdf() {
               </>
             )}
             <div style={{ gridColumn: '1 / -1' }}>
-              <button tabIndex={5} className="act-btn active" onClick={simpanKata}
+              <button tabIndex={6} className="act-btn active" onClick={simpanKata}
                 style={{ width: '100%', padding: 10, fontWeight: 600 }}>{editingId ? 'Update' : 'Simpan'}</button>
             </div>
           </div>
@@ -849,7 +915,7 @@ async function hapusPdf() {
           <div className="modal-icon">🔁</div>
           <div className="modal-title">Kata Ini Udah Pernah Dicatat!</div>
           <div className="modal-desc">
-            Kata ini udah ada di paket <b>{dup?.nama}{dup?.tanggal ? ` (${dup.tanggal})` : ''}</b>.<br /><br />
+            Kata <b>{dup?.kata}</b> udah ada di paket <b>{dup?.nama}{dup?.tanggal ? ` (${dup.tanggal})` : ''}</b>.<br /><br />
             Ayo inget-inget! Ini active recall — coba diingat lagi artinya sebelum buka paket lamanya. 🌱
           </div>
           <div className="modal-btns">
