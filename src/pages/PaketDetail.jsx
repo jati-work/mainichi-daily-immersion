@@ -654,11 +654,18 @@ export default function PaketDetail({ paketId, goTo }) {
     setUploading(true)
     const sisi = await tentukanSisiStorage(paket)
     const client = clientStorageUntuk(sisi)
+    const pathLama = paket?.pdf_path || null
     const path = `${paketId}-${Date.now()}.pdf`
     const { error: upErr } = await client.storage.from('immersion-pdfs').upload(path, file, { upsert: true })
     if (upErr) { alert('Gagal upload: ' + upErr.message); setUploading(false); return }
     const { error: updErr } = await supabase.from('paket').update({ pdf_path: path }).eq('id', paketId)
     if (updErr) { alert('Gagal nyimpen path PDF: ' + updErr.message); setUploading(false); return }
+    // upload baru & database udah sukses -- baru sekarang aman hapus file PDF lama
+    // (kalau ada), biar nggak numpuk jadi orphan tiap kali ganti PDF
+    if (pathLama && pathLama !== path) {
+      const { error: hapusLamaErr } = await client.storage.from('immersion-pdfs').remove([pathLama])
+      if (hapusLamaErr) console.error('Gagal hapus PDF lama:', hapusLamaErr.message)
+    }
     const { data: signed, error: signErr } = await client.storage.from('immersion-pdfs').createSignedUrl(path, 3600)
     setUploading(false)
     if (signErr) { alert('Upload sukses, tapi gagal nampilin PDF-nya: ' + signErr.message); muatSemua(); return }
