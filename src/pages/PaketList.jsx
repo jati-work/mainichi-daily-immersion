@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../supabaseClient'
+import { supabase, supabaseStorage } from '../supabaseClient'
 
 export default function PaketList({ goTo, openPaket }) {
   const [folders, setFolders] = useState([])
@@ -288,6 +288,17 @@ export default function PaketList({ goTo, openPaket }) {
       : `Hapus folder "${f.nama}"?`
     if (!confirm(pesan)) return
     if (jumlahPaket > 0) {
+      // hapus dulu semua file PDF paket-paket di dalam folder ini (dan sub-foldernya)
+      // dari storage yang sesuai, biar nggak jadi file "orphan" yang numpuk
+      const paketTerkait = paketList.filter(p => idTurunan.includes(p.folder_id))
+      const pdfPaths = paketTerkait.map(p => p.pdf_path).filter(Boolean)
+      if (pdfPaths.length > 0) {
+        const sisi = sisiItem({ tipe: 'folder', data: f })
+        const { error: storageErr } = await clientStorageUntuk(sisi).storage.from('immersion-pdfs').remove(pdfPaths)
+        if (storageErr) {
+          console.error('Gagal hapus sebagian/semua PDF dari storage:', storageErr.message)
+        }
+      }
       const { error } = await supabase.from('paket').delete().in('folder_id', idTurunan)
       if (error) { alert('Gagal hapus isi folder: ' + error.message); return }
     }
@@ -357,8 +368,22 @@ export default function PaketList({ goTo, openPaket }) {
     else muatData()
   }
 
+  function clientStorageUntuk(sisi) {
+    return sisi === 'kanan' ? supabaseStorage : supabase
+  }
+
   async function hapusPaket(p) {
     if (!confirm(`Hapus paket "${p.nama}" beserta semua katanya?`)) return
+    // hapus dulu file PDF-nya (kalau ada) dari storage yang sesuai (kiri/kanan),
+    // biar nggak jadi file "orphan" yang numpuk terus di storage
+    if (p.pdf_path) {
+      const sisi = sisiItem({ tipe: 'paket', data: p })
+      const { error: storageErr } = await clientStorageUntuk(sisi).storage.from('immersion-pdfs').remove([p.pdf_path])
+      if (storageErr) {
+        // tetap lanjut hapus row database-nya, tapi kasih tau kalau file PDF-nya gagal kehapus
+        console.error('Gagal hapus PDF dari storage:', storageErr.message)
+      }
+    }
     const { error } = await supabase.from('paket').delete().eq('id', p.id)
     if (error) alert('Gagal hapus: ' + error.message)
     else muatData()
