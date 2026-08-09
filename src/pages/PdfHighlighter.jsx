@@ -716,9 +716,9 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifySelf: 'end' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <button className="icon-btn" onClick={() => setScale(s => Math.max(s - 0.2, 0.6))}>－</button>
+            <button className="icon-btn" onClick={() => setScale(s => Math.max(s - 0.05, 0.6))}>－</button>
             <div style={{ fontSize: 12, color: '#1a1a1a', minWidth: 36, textAlign: 'center' }}>{Math.round(scale * 100)}%</div>
-            <button className="icon-btn" onClick={() => setScale(s => Math.min(s + 0.2, 3))}>＋</button>
+            <button className="icon-btn" onClick={() => setScale(s => Math.min(s + 0.05, 3))}>＋</button>
           </div>
           {onHapusPdf && (
             <button className="icon-btn danger" onClick={() => setShowKonfirmasiHapus(true)} title="Hapus PDF">🗑️</button>
