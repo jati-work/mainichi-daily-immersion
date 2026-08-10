@@ -174,7 +174,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const [pdfDoc, setPdfDoc] = useState(null)
   const [numPages, setNumPages] = useState(0)
   const [pageNum, setPageNum] = useState(1)
-  const [scale, setScale] = useState(1)
+  const [scale, setScale] = useState(() => bacaPreferensi('pref-zoom', 1))
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
@@ -196,6 +196,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   useEffect(() => { localStorage.setItem('pref-warnaTeks', JSON.stringify(warnaTeks)) }, [warnaTeks])
   useEffect(() => { localStorage.setItem('pref-warnaPen', JSON.stringify(warnaPen)) }, [warnaPen])
   useEffect(() => { localStorage.setItem('pref-tebalPen', JSON.stringify(tebalPen)) }, [tebalPen])
+  useEffect(() => { localStorage.setItem('pref-zoom', JSON.stringify(scale)) }, [scale])
   const [editingTeksId, setEditingTeksId] = useState(null)
   const [showKonfirmasiHapus, setShowKonfirmasiHapus] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -209,6 +210,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
   const overlayRef = useRef(null)
   const panelBodyRef = useRef(null)
   const progressDebounceRef = useRef(null)
+  const scrollSaveDebounceRef = useRef(null)
 
   // ----- load dokumen PDF -----
   useEffect(() => {
@@ -255,9 +257,6 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
       try {
         if (!batal) setErrorMsg(null)
         const page = await pdfDoc.getPage(pageNum)
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
 
         // Halaman ini biasanya hasil scan (gambar bitonal resolusi tinggi),
         // jadi teks kecil (kanji dll) gampang burem kalau cuma di-render
@@ -270,20 +269,31 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
         const displayViewport = page.getViewport({ scale })
         const renderViewport = page.getViewport({ scale: scale * dpr * OVERSAMPLE })
 
-        canvas.width = Math.floor(renderViewport.width)
-        canvas.height = Math.floor(renderViewport.height)
+        // Render dulu ke canvas SEMENTARA yang gak kelihatan di layar.
+        // Halaman lama di canvas utama tetep utuh nampil selama proses ini,
+        // baru habis render-nya kelar kita "tempel" sekali jadi ke canvas
+        // utama -> gak ada jeda kosong/kedip pas pindah halaman.
+        const offscreen = document.createElement('canvas')
+        offscreen.width = Math.floor(renderViewport.width)
+        offscreen.height = Math.floor(renderViewport.height)
+        const offCtx = offscreen.getContext('2d')
+        offCtx.imageSmoothingEnabled = true
+        offCtx.imageSmoothingQuality = 'high'
+        await page.render({ canvasContext: offCtx, viewport: renderViewport }).promise
+        if (batal) return
+
+        const canvas = canvasRef.current
+        if (!canvas) return
+        const ctx = canvas.getContext('2d')
+        canvas.width = offscreen.width
+        canvas.height = offscreen.height
         canvas.style.width = `${displayViewport.width}px`
         canvas.style.height = `${displayViewport.height}px`
         ctx.imageSmoothingEnabled = true
         ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(offscreen, 0, 0)
 
-        // set ukuran wrapper BARENGAN sama canvas (sebelum render mulai),
-        // bukan nunggu render kelar. Kalau nunggu, ada jeda di mana canvas
-        // udah gede tapi wrapper-nya masih ukuran lama/0 -> kertasnya
-        // keliatan "nyamping" dulu sebelum jump ke tengah pas wrapper nyusul.
         if (!batal) setCanvasSize({ width: displayViewport.width, height: displayViewport.height })
-
-        await page.render({ canvasContext: ctx, viewport: renderViewport }).promise
       } catch (err) {
         // Beberapa halaman scan pakai kompresi gambar (JBIG2/OpenJPEG) yang
         // butuh wasm buat di-decode. Kalau gagal, jangan senyap -> tampilkan
@@ -318,11 +328,37 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
     setRevealedIds(new Set())
   }, [pageNum])
 
-  // tiap pindah halaman, mulai dari atas lagi (bukan lanjut dari posisi
-  // scroll halaman sebelumnya)
+  // abis halaman baru kelar di-render (canvasSize berubah = ukuran wrapper
+  // udah pas), balikin scroll ke posisi terakhir yang tersimpan buat
+  // halaman ini (kalau pernah discroll sebelumnya), atau ke atas kalau belum.
+  // requestAnimationFrame biar nunggu 1 frame dulu -> DOM-nya udah kelar
+  // resize sebelum scrollTop/scrollLeft di-set (kalau langsung, browser
+  // belum sempet update scrollHeight yang bener).
   useEffect(() => {
-    if (panelBodyRef.current) panelBodyRef.current.scrollTop = 0
-  }, [pageNum])
+    const el = panelBodyRef.current
+    if (!el) return
+    const saved = bacaPreferensi(`pref-scroll-${paketId}-${pdfPath}-${pageNum}`, null)
+    requestAnimationFrame(() => {
+      el.scrollTop = saved?.top || 0
+      el.scrollLeft = saved?.left || 0
+    })
+  }, [pageNum, canvasSize, paketId, pdfPath])
+
+  // simpen posisi scroll tiap kali user scroll-scroll di dalam halaman,
+  // di-debounce biar nggak nulis ke localStorage tiap pixel gerak
+  function handleScrollPanel() {
+    const el = panelBodyRef.current
+    if (!el) return
+    clearTimeout(scrollSaveDebounceRef.current)
+    scrollSaveDebounceRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          `pref-scroll-${paketId}-${pdfPath}-${pageNum}`,
+          JSON.stringify({ top: el.scrollTop, left: el.scrollLeft })
+        )
+      } catch {}
+    }, 300)
+  }
 
   // simpen halaman terakhir yang dibaca ke Supabase, biar pas dibuka lagi
   // (dari device manapun) lanjut dari situ. Di-debounce biar nggak spam
@@ -755,7 +791,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
         </div>
       </div>
 
-      <div className="pdf-panel-body" ref={panelBodyRef} style={{ overflow: 'auto', display: 'block', textAlign: 'center' }}>
+      <div className="pdf-panel-body" ref={panelBodyRef} onScroll={handleScrollPanel} style={{ overflow: 'auto', display: 'block', textAlign: 'center' }}>
         {loading ? (
           <div style={{ color: '#cde8d0', padding: 30 }}>Memuat PDF...</div>
         ) : errorMsg ? (
