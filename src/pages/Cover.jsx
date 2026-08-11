@@ -1,6 +1,6 @@
 import CaraBelajar from '../components/CaraBelajar'
 
-export default function Cover({ goTo, jumlahPaket, jumlahKata, jumlahHariJurnal }) {
+export default function Cover({ goTo, jumlahPaket, jumlahKata, jumlahHariAktif }) {
   function kunciUlang() {
     if (!confirm('Keluar dan minta kata sandi lagi waktu buka app berikutnya?')) return
     localStorage.removeItem('immersion-unlocked')
@@ -33,9 +33,9 @@ export default function Cover({ goTo, jumlahPaket, jumlahKata, jumlahHariJurnal 
         <div className="nav-card" onClick={() => goTo('jurnal')}>
           <div className="nav-icon">📅</div>
           <div className="nav-info">
-            <div className="nav-title">Jurnal Kalender</div>
+            <div className="nav-title">Kalender Aktivitas</div>
             <div className="nav-desc">
-              {jumlahHariJurnal ? `${jumlahHariJurnal} hari sudah dicatat` : 'tandai tiap hari kamu belajar'}
+              {jumlahHariAktif ? `${jumlahHariAktif} hari sudah aktif belajar` : 'tandai kata hafal buat mulai tracking'}
             </div>
           </div>
         </div>
