@@ -25,14 +25,14 @@ export default function PaketList({ goTo, openPaket }) {
 
   async function muatData() {
     setLoading(true)
-    const [{ data: fData, error: fErr }, { data: pData, error: pErr }, { data: hafalData }, { data: jurnalData }] = await Promise.all([
+    const [{ data: fData, error: fErr }, { data: pData, error: pErr }, { data: hafalData }, { data: aktivitasData }] = await Promise.all([
       supabase.from('folders').select('id, nama, parent_id, urutan, kolom').order('urutan', { ascending: true }),
       supabase
         .from('paket')
         .select('id, nama, folder_id, urutan_dalam_grup, pdf_path, kolom, kata(count), diary_pages(isi_teks)')
         .order('urutan_dalam_grup', { ascending: true }),
       supabase.from('kata').select('paket_id').eq('hafal', true),
-      supabase.from('jurnal').select('tanggal'),
+      supabase.from('aktivitas_harian').select('tanggal'),
     ])
     if (!fErr && fData) setFolders(fData)
     if (!pErr && pData) {
@@ -45,7 +45,7 @@ export default function PaketList({ goTo, openPaket }) {
         adaIsiDiary: (p.diary_pages || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0),
       })))
     }
-    setStreak(hitungStreak(new Set((jurnalData || []).map(j => j.tanggal))))
+    setStreak(hitungStreak(new Set((aktivitasData || []).map(a => a.tanggal))))
     setLoading(false)
   }
   function pad2(n) { return n < 10 ? '0' + n : '' + n }
@@ -628,7 +628,7 @@ export default function PaketList({ goTo, openPaket }) {
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {streak > 0 && (
               <div
-                title={`Streak ${streak} hari berturut-turut nulis jurnal`}
+                title={`Streak ${streak} hari berturut-turut ada kata yang ditandain hafal`}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700,
                   color: '#e07b1a', background: '#fff3e6', borderRadius: 999, padding: '6px 12px',
