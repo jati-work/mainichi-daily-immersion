@@ -55,8 +55,8 @@ export default function CaraBelajar() {
         <Step num="3" title="Tandai hafal, jangan cuma ditebak-tebak">
           Setelah ngerti artinya, coba rangkai sendiri dalam kalimat baru sebelum dicentang hafal. Kata yang nggak dipake dalam kalimat susah nempel permanen.
         </Step>
-        <Step num="4" title="Isi Jurnal Kalender tiap hari">
-          Walau cuma 1 kata baru atau 10 menit nonton, catat di kalender. Yang penting konsisten kelihatan progress hariannya — biar termotivasi jagain streak-nya jalan.
+        <Step num="4" title="Konsisten tiap hari, walau dikit">
+          Walau cuma 1 kata baru yang ditandain hafal, itu udah cukup. Streak-nya kecatet otomatis begitu ada kata yang kamu tandain hafal hari itu — nggak perlu nulis apa-apa, yang penting konsisten kelihatan progress hariannya.
         </Step>
       </Toggle>
 
