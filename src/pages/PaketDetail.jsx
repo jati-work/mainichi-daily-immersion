@@ -274,8 +274,23 @@ export default function PaketDetail({ paketId, goTo }) {
     setKartuMode(null)
   }
 
+  function tanggalHariIni() {
+    const d = new Date()
+    const pad2 = n => n < 10 ? '0' + n : '' + n
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+  }
+  async function catatAktivitasHariIni() {
+    try {
+      await supabase.from('aktivitas_harian').upsert({ tanggal: tanggalHariIni() }, { onConflict: 'tanggal' })
+    } catch (err) {
+      console.error('Gagal catat aktivitas harian:', err.message)
+    }
+  }
+
   async function toggleHafal(k) {
-    await supabase.from('kata').update({ hafal: !k.hafal }).eq('id', k.id)
+    const jadiHafal = !k.hafal
+    await supabase.from('kata').update({ hafal: jadiHafal }).eq('id', k.id)
+    if (jadiHafal) catatAktivitasHariIni()
     muatSemua()
   }
 
@@ -725,6 +740,7 @@ async function hapusPdf() {
     if (tes.idx + 1 >= tes.words.length) {
       if (tes.benarIds.length > 0) {
         await Promise.all(tes.benarIds.map(id => supabase.from('kata').update({ hafal: true }).eq('id', id)))
+        catatAktivitasHariIni()
         muatSemua()
       }
       setTes(t => ({ ...t, idx: t.idx + 1 }))
