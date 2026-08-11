@@ -44,15 +44,15 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(() => localStorage.getItem(UNLOCK_KEY) === '1')
   const [page, setPage] = useState('cover')
   const [activePaketId, setActivePaketId] = useState(null)
-  const [ringkasan, setRingkasan] = useState({ jumlahPaket: 0, jumlahKata: 0, jumlahHariJurnal: 0 })
+  const [ringkasan, setRingkasan] = useState({ jumlahPaket: 0, jumlahKata: 0, jumlahHariAktif: 0 })
 
   useEffect(() => {
     if (!unlocked) return
     async function muatRingkasan() {
       const { count: jumlahPaket } = await supabase.from('paket').select('*', { count: 'exact', head: true })
       const { count: jumlahKata } = await supabase.from('kata').select('*', { count: 'exact', head: true })
-      const { count: jumlahHariJurnal } = await supabase.from('jurnal').select('*', { count: 'exact', head: true })
-      setRingkasan({ jumlahPaket: jumlahPaket || 0, jumlahKata: jumlahKata || 0, jumlahHariJurnal: jumlahHariJurnal || 0 })
+      const { count: jumlahHariAktif } = await supabase.from('aktivitas_harian').select('*', { count: 'exact', head: true })
+      setRingkasan({ jumlahPaket: jumlahPaket || 0, jumlahKata: jumlahKata || 0, jumlahHariAktif: jumlahHariAktif || 0 })
     }
     muatRingkasan()
   }, [unlocked, page])
@@ -83,7 +83,7 @@ export default function App() {
       goTo={goTo}
       jumlahPaket={ringkasan.jumlahPaket}
       jumlahKata={ringkasan.jumlahKata}
-      jumlahHariJurnal={ringkasan.jumlahHariJurnal}
+      jumlahHariAktif={ringkasan.jumlahHariAktif}
     />
   )
 }
