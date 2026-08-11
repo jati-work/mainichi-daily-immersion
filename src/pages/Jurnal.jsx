@@ -12,6 +12,7 @@ export default function Jurnal({ goTo }) {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
   const [entries, setEntries] = useState({}) // {tanggal: catatan}
+  const [aktivitasSet, setAktivitasSet] = useState(new Set())
   const [editKey, setEditKey] = useState(null)
   const [editText, setEditText] = useState('')
 
@@ -20,6 +21,8 @@ export default function Jurnal({ goTo }) {
     const map = {}
     ;(data || []).forEach(r => { map[r.tanggal] = r.catatan })
     setEntries(map)
+    const { data: aktivitas } = await supabase.from('aktivitas_harian').select('tanggal')
+    setAktivitasSet(new Set((aktivitas || []).map(a => a.tanggal)))
   }
   useEffect(() => { muat() }, [])
 
@@ -52,7 +55,7 @@ export default function Jurnal({ goTo }) {
     let d = new Date()
     while (true) {
       const key = dateKey(d.getFullYear(), d.getMonth(), d.getDate())
-      if (entries[key]) { streak++; d.setDate(d.getDate() - 1) } else break
+      if (aktivitasSet.has(key)) { streak++; d.setDate(d.getDate() - 1) } else break
     }
     return streak
   }
