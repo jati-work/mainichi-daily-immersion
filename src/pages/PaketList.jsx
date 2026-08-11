@@ -13,6 +13,7 @@ export default function PaketList({ goTo, openPaket }) {
   const [kamusHasil, setKamusHasil] = useState([])
   const [kamusLoading, setKamusLoading] = useState(false)
   const [tambahMenuSisi, setTambahMenuSisi] = useState(null) // 'kiri' | 'kanan' | null
+  const [streak, setStreak] = useState(0)
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -24,22 +25,46 @@ export default function PaketList({ goTo, openPaket }) {
 
   async function muatData() {
     setLoading(true)
-    const [{ data: fData, error: fErr }, { data: pData, error: pErr }] = await Promise.all([
+    const [{ data: fData, error: fErr }, { data: pData, error: pErr }, { data: hafalData }, { data: jurnalData }] = await Promise.all([
       supabase.from('folders').select('id, nama, parent_id, urutan, kolom').order('urutan', { ascending: true }),
       supabase
         .from('paket')
         .select('id, nama, folder_id, urutan_dalam_grup, pdf_path, kolom, kata(count), diary_pages(isi_teks)')
         .order('urutan_dalam_grup', { ascending: true }),
+      supabase.from('kata').select('paket_id').eq('hafal', true),
+      supabase.from('jurnal').select('tanggal'),
     ])
     if (!fErr && fData) setFolders(fData)
     if (!pErr && pData) {
+      const mapHafal = {}
+      ;(hafalData || []).forEach(k => { mapHafal[k.paket_id] = (mapHafal[k.paket_id] || 0) + 1 })
       setPaketList(pData.map(p => ({
         ...p,
         jumlahKata: p.kata?.[0]?.count || 0,
+        jumlahHafal: mapHafal[p.id] || 0,
         adaIsiDiary: (p.diary_pages || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0),
       })))
     }
+    setStreak(hitungStreak(new Set((jurnalData || []).map(j => j.tanggal))))
     setLoading(false)
+  }
+  function pad2(n) { return n < 10 ? '0' + n : '' + n }
+  function hitungStreak(tanggalSet) {
+    let streak = 0
+    let d = new Date()
+    while (true) {
+      const key = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+      if (tanggalSet.has(key)) { streak++; d.setDate(d.getDate() - 1) } else break
+    }
+    return streak
+  }
+  // total kata & yang udah hafal di dalam folder ini + semua sub-foldernya
+  function progresFolder(folderId) {
+    const idTurunan = idFolderTurunan(folderId)
+    const relevan = paketList.filter(p => idTurunan.has(p.folder_id))
+    const total = relevan.reduce((s, p) => s + p.jumlahKata, 0)
+    const hafal = relevan.reduce((s, p) => s + p.jumlahHafal, 0)
+    return { total, hafal, persen: total > 0 ? Math.round((hafal / total) * 100) : null }
   }
 
   useEffect(() => { muatData() }, [])
@@ -420,8 +445,7 @@ export default function PaketList({ goTo, openPaket }) {
   const jejakKanan = useMemo(() => jejakBreadcrumb(folderKanan), [folders, folderKanan])
 
   function RowFolder({ f, idx, itemsLen, sisi, onOpen }) {
-    const isiFolder = anakFolder(f.id, sisi).length
-    const isiPaket = anakPaket(f.id, sisi).length
+    const { persen } = progresFolder(f.id)
     return (
       <div className="paket-row">
         <div className="urutan-col">
@@ -430,9 +454,11 @@ export default function PaketList({ goTo, openPaket }) {
         </div>
         <div className="info" onClick={onOpen}>
           <div className="nama"><span>📁 {f.nama}</span></div>
-          <div className="meta">
-            <span>{isiFolder > 0 ? `${isiFolder} folder, ` : ''}{isiPaket} paket</span>
-          </div>
+          {persen !== null && (
+            <div className="progres-folder" title={`${persen}% kata udah hafal`}>
+              <div className="progres-folder-bar" style={{ width: `${persen}%` }} />
+            </div>
+          )}
         </div>
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'folder', item: f })}>➜</button>
         <button className="icon-btn" title="Rename folder" onClick={() => renameFolder(f)}>✏️</button>
@@ -442,6 +468,7 @@ export default function PaketList({ goTo, openPaket }) {
   }
 
   function RowPaket({ p, idx, itemsLen, sisi, allowReorder = true }) {
+    const persen = p.jumlahKata > 0 ? Math.round((p.jumlahHafal / p.jumlahKata) * 100) : null
     return (
       <div className="paket-row">
         <div className="urutan-col">
@@ -458,6 +485,11 @@ export default function PaketList({ goTo, openPaket }) {
             {p.pdf_path && <span title="Ada PDF">📄</span>}
             {p.adaIsiDiary && <span title="Ada catatan diary">📔</span>}
           </div>
+          {persen !== null && (
+            <div className="progres-folder" title={`${persen}% kata udah hafal`}>
+              <div className="progres-folder-bar" style={{ width: `${persen}%` }} />
+            </div>
+          )}
         </div>
         <button className="icon-btn" title="Pindahkan ke folder lain" onClick={() => setMovePicker({ type: 'paket', item: p })}>➜</button>
         <button className="icon-btn" title="Ubah nama" onClick={() => editPaket(p)}>✏️</button>
@@ -593,7 +625,18 @@ export default function PaketList({ goTo, openPaket }) {
             <div className="cover-title" style={{ fontSize: 22 }}>Kosakata Immersion</div>
             <div className="cover-sub">kosakata dari keseharian</div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {streak > 0 && (
+              <div
+                title={`Streak ${streak} hari berturut-turut nulis jurnal`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700,
+                  color: '#e07b1a', background: '#fff3e6', borderRadius: 999, padding: '6px 12px',
+                }}
+              >
+                🔥 {streak} hari
+              </div>
+            )}
             <button
               className="icon-btn" title="Download PDF (buat dibaca)" onClick={exportSemuaHafalan}
               disabled={exportLoading}
