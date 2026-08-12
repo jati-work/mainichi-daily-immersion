@@ -14,6 +14,7 @@ export default function PaketList({ goTo, openPaket }) {
   const [kamusLoading, setKamusLoading] = useState(false)
   const [tambahMenuSisi, setTambahMenuSisi] = useState(null) // 'kiri' | 'kanan' | null
   const [streak, setStreak] = useState(0)
+  const [aktifHariIni, setAktifHariIni] = useState(true)
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -45,18 +46,26 @@ export default function PaketList({ goTo, openPaket }) {
         adaIsiDiary: (p.diary_pages || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0),
       })))
     }
-    setStreak(hitungStreak(new Set((aktivitasData || []).map(a => a.tanggal))))
+    const hasil = hitungStreak(new Set((aktivitasData || []).map(a => a.tanggal)))
+    setStreak(hasil.streak)
+    setAktifHariIni(hasil.aktifHariIni)
     setLoading(false)
   }
   function pad2(n) { return n < 10 ? '0' + n : '' + n }
   function hitungStreak(tanggalSet) {
-    let streak = 0
     let d = new Date()
+    const keyHariIni = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+    const aktifHariIni = tanggalSet.has(keyHariIni)
+    // kalau hari ini belum ada aktivitas, jangan langsung dianggap putus --
+    // harinya kan belum abis. Mulai ngitung dari kemarin dulu; streak baru
+    // beneran ke-reset kalau KEMARIN juga kosong.
+    if (!aktifHariIni) d.setDate(d.getDate() - 1)
+    let streak = 0
     while (true) {
       const key = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
       if (tanggalSet.has(key)) { streak++; d.setDate(d.getDate() - 1) } else break
     }
-    return streak
+    return { streak, aktifHariIni }
   }
   // total kata & yang udah hafal di dalam folder ini + semua sub-foldernya
   function progresFolder(folderId) {
@@ -628,13 +637,17 @@ export default function PaketList({ goTo, openPaket }) {
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {streak > 0 && (
               <div
-                title={`Streak ${streak} hari berturut-turut ada kata yang ditandain hafal`}
+                title={aktifHariIni
+                  ? `Streak ${streak} hari berturut-turut`
+                  : `Streak ${streak} hari -- ayo belajar!`}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700,
-                  color: '#e07b1a', background: '#fff3e6', borderRadius: 999, padding: '6px 12px',
+                  borderRadius: 999, padding: '6px 12px',
+                  color: aktifHariIni ? '#e07b1a' : '#8a8a8a',
+                  background: aktifHariIni ? '#fff3e6' : '#eeeeee',
                 }}
               >
-                🔥 {streak} hari
+                <span style={{ filter: aktifHariIni ? 'none' : 'grayscale(100%)' }}>🔥</span> {streak} hari
               </div>
             )}
             <button
