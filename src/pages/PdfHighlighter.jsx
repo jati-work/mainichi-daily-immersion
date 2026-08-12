@@ -846,6 +846,21 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                   viewBox={`0 0 ${canvasSize.width || 1} ${canvasSize.height || 1}`}
                   style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
                 >
+                  {mode === 'hapus' && (
+                    // garis "hantu" -- gak keliatan, tapi jauh lebih tebal dari garis
+                    // aslinya, khusus buat gampangin area klik pas mode hapus. Tanpa
+                    // ini, area klik cuma setipis garis pen aslinya -- susah kena.
+                    <polyline
+                      points={(p.points || []).map(pt => `${pt.x * canvasSize.width},${pt.y * canvasSize.height}`).join(' ')}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth={Math.max((p.thickness || 3) * scale, 10) + 16}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                      onClick={() => hapusAnotasi(p.id)}
+                    />
+                  )}
                   <polyline
                     points={(p.points || []).map(pt => `${pt.x * canvasSize.width},${pt.y * canvasSize.height}`).join(' ')}
                     fill="none"
@@ -853,8 +868,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                     strokeWidth={(p.thickness || 3) * scale}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    style={{ pointerEvents: mode === 'hapus' ? 'stroke' : 'none', cursor: mode === 'hapus' ? 'pointer' : 'default' }}
-                    onClick={() => { if (mode === 'hapus') hapusAnotasi(p.id) }}
+                    style={{ pointerEvents: 'none' }}
                   />
                 </svg>
               ))}
