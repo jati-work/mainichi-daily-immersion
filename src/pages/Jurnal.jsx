@@ -33,13 +33,16 @@ export default function Jurnal({ goTo }) {
   const filledCount = sel.filter(d => aktivitasSet.has(dateKey(year, month, d))).length
 
   function hitungStreak() {
-    let streak = 0
     let d = new Date()
+    const keyHariIni = dateKey(d.getFullYear(), d.getMonth(), d.getDate())
+    const aktifHariIni = aktivitasSet.has(keyHariIni)
+    if (!aktifHariIni) d.setDate(d.getDate() - 1)
+    let streak = 0
     while (true) {
       const key = dateKey(d.getFullYear(), d.getMonth(), d.getDate())
       if (aktivitasSet.has(key)) { streak++; d.setDate(d.getDate() - 1) } else break
     }
-    return streak
+    return { streak, aktifHariIni }
   }
 
   return (
@@ -58,8 +61,17 @@ export default function Jurnal({ goTo }) {
           </div>
           <button className="icon-btn" onClick={() => geser(1)}>→</button>
         </div>
-        <div style={{ textAlign: 'center', fontSize: 11, color: '#8aaf8a', marginBottom: 10 }}>
-          {hitungStreak() > 0 ? `🔥 Streak ${hitungStreak()} hari berturut-turut` : 'Belum ada streak — mulai hari ini!'}
+        <div style={{ textAlign: 'center', fontSize: 11, marginBottom: 10 }}>
+          {(() => {
+            const { streak, aktifHariIni } = hitungStreak()
+            if (streak === 0) return <span style={{ color: '#8aaf8a' }}>Belum ada streak — mulai hari ini!</span>
+            return (
+              <span style={{ color: aktifHariIni ? '#8aaf8a' : '#9a9a9a' }}>
+                <span style={{ filter: aktifHariIni ? 'none' : 'grayscale(100%)' }}>🔥</span> Streak {streak} hari berturut-turut
+                {!aktifHariIni && ' — ayo belajar!'}
+              </span>
+            )
+          })()}
         </div>
         <div className="cal-grid">
           {NAMA_HARI.map(h => <div key={h} className="cal-dow">{h}</div>)}
