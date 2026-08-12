@@ -844,8 +844,7 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                   key={p.id}
                   width="100%" height="100%"
                   viewBox={`0 0 ${canvasSize.width || 1} ${canvasSize.height || 1}`}
-                  style={{ position: 'absolute', inset: 0, pointerEvents: mode === 'hapus' ? 'stroke' : 'none', cursor: mode === 'hapus' ? 'pointer' : 'default' }}
-                  onClick={() => { if (mode === 'hapus') hapusAnotasi(p.id) }}
+                  style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
                 >
                   <polyline
                     points={(p.points || []).map(pt => `${pt.x * canvasSize.width},${pt.y * canvasSize.height}`).join(' ')}
@@ -854,6 +853,8 @@ export default function PdfHighlighter({ paketId, pdfPath, pdfUrl, onClose, onHa
                     strokeWidth={(p.thickness || 3) * scale}
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    style={{ pointerEvents: mode === 'hapus' ? 'stroke' : 'none', cursor: mode === 'hapus' ? 'pointer' : 'default' }}
+                    onClick={() => { if (mode === 'hapus') hapusAnotasi(p.id) }}
                   />
                 </svg>
               ))}
