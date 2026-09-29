@@ -4,6 +4,7 @@ import Cover from './pages/Cover'
 import PaketList from './pages/PaketList'
 import PaketDetail from './pages/PaketDetail'
 import Jurnal from './pages/Jurnal'
+import TebakRadikal from './pages/TebakRadikal'
 
 const GATE_PASSWORD = import.meta.env.VITE_APP_PASSWORD || 'ganbatte'
 const UNLOCK_KEY = 'immersion-unlocked'
@@ -77,6 +78,9 @@ export default function App() {
   }
   if (page === 'jurnal') {
     return <Jurnal goTo={goTo} />
+  }
+  if (page === 'radikal') {
+    return <TebakRadikal goTo={goTo} />
   }
   return (
     <Cover
