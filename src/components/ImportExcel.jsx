@@ -30,6 +30,7 @@ const kunciHeader = h => String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
 const pecahTag = s => String(s || '').split(',').map(w => w.trim()).filter(Boolean)
 
 // ---------- load SheetJS dari cdnjs (sama pola kayak jsPDF di PaketList) ----------
+// dipakai buat BACA file .xlsx pas import
 async function loadXLSX() {
   if (window.XLSX) return window.XLSX
   await new Promise((resolve, reject) => {
@@ -40,6 +41,20 @@ async function loadXLSX() {
     document.body.appendChild(s)
   })
   return window.XLSX
+}
+
+// dipakai khusus buat BIKIN template -- SheetJS versi gratis nggak bisa nulis
+// warna sel, jadi buat header yang di-stabilo biru pakai ExcelJS
+async function loadExcelJS() {
+  if (window.ExcelJS) return window.ExcelJS
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'
+    s.onload = resolve
+    s.onerror = () => reject(new Error('Gagal load library Excel (cek koneksi internet)'))
+    document.body.appendChild(s)
+  })
+  return window.ExcelJS
 }
 
 // ambil SEMUA kata (Supabase default cuma ngembaliin 1000 baris per request)
@@ -133,29 +148,50 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
 
   async function downloadTemplate() {
     setMenu(false)
+    setBusy(true)
     try {
-      const XLSX = await loadXLSX()
+      const ExcelJS = await loadExcelJS()
       const kolom = KOLOM[sisi]
-      const wb = XLSX.utils.book_new()
-      const ws = XLSX.utils.aoa_to_sheet([kolom.map(c => c.judul)])
-      ws['!cols'] = kolom.map(c => ({ wch: c.field === 'jp' || c.field === 'arti' ? 28 : 20 }))
-      XLSX.utils.book_append_sheet(wb, ws, mode === 'root' ? 'Paket 1' : 'Kata')
+      const wb = new ExcelJS.Workbook()
+
+      const ws = wb.addWorksheet(mode === 'root' ? 'Paket 1' : 'Kata')
+      ws.columns = kolom.map(c => ({ header: c.judul, width: c.field === 'jp' || c.field === 'arti' ? 30 : 22 }))
+      ws.getRow(1).eachCell((cell, i) => {
+        cell.font = { bold: true, color: { argb: kolom[i - 1].wajib ? 'FFFFFFFF' : 'FF2D6A4A' } }
+        if (kolom[i - 1].wajib) {
+          // "stabilo biru" di header kolom wajib, biar langsung kelihatan mana yang harus diisi
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3E7CB1' } }
+        }
+      })
+      ws.getRow(1).height = 20
+
+      const wsP = wb.addWorksheet('Petunjuk')
+      wsP.columns = [{ width: 95 }]
       const petunjuk = [
-        ['Petunjuk import'],
-        [`Wajib diisi: ${kolom.filter(c => c.wajib).map(c => c.judul).join(' dan ')}. Kolom lain boleh kosong.`],
+        'Petunjuk import',
+        '',
+        `Wajib diisi (header biru): ${kolom.filter(c => c.wajib).map(c => c.judul).join(' dan ')}. Kolom lain (header hijau) boleh dikosongin.`,
         mode === 'root'
-          ? ['Satu sheet = satu paket baru. Nama sheet jadi nama paket (maks. 31 karakter). Tambah sheet buat paket lain.']
-          : ['Cuma sheet pertama (selain sheet Petunjuk ini) yang dibaca.'],
-        sisi === 'kanan' ? ['Kata Baru: pisahkan pakai koma, contoh: 勉強, 宿題'] : [],
-        ['Bagian: nama bagian (contoh: Episode 1). Bagian yang belum ada dibuat otomatis.'],
-        ['Kata/kalimat yang sudah ada di paket lain akan dilewati (bisa dipaksa masuk lewat pratinjau).'],
-        ['Jangan ubah nama kolom di baris pertama. Sheet bernama "Petunjuk" nggak ikut diimpor.'],
-      ].filter(r => r.length)
-      const wsP = XLSX.utils.aoa_to_sheet(petunjuk)
-      wsP['!cols'] = [{ wch: 100 }]
-      XLSX.utils.book_append_sheet(wb, wsP, 'Petunjuk')
-      XLSX.writeFile(wb, `template-import-${sisi === 'kanan' ? 'harian' : 'buku'}.xlsx`)
-    } catch (e) { alert(e.message) }
+          ? 'Satu sheet = satu paket baru. Nama sheet jadi nama paket (maks. 31 karakter). Tambah sheet buat paket lain.'
+          : 'Cuma sheet pertama (selain sheet Petunjuk ini) yang dibaca.',
+        sisi === 'kanan' ? 'Kata Baru: pisahkan pakai koma, contoh: 勉強, 宿題' : '',
+        'Bagian: nama bagian (contoh: Episode 1). Bagian yang belum ada dibuat otomatis.',
+        'Kata/kalimat yang sudah ada di paket lain akan dilewati (bisa dipaksa masuk lewat pratinjau).',
+        'Jangan ubah nama kolom di baris pertama. Sheet bernama "Petunjuk" nggak ikut diimpor.',
+      ].filter(Boolean)
+      petunjuk.forEach(t => wsP.addRow([t]))
+      wsP.getRow(1).font = { bold: true, size: 13, color: { argb: 'FF2D6A4A' } }
+
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `template-import-${sisi === 'kanan' ? 'harian' : 'buku'}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) { alert('Gagal bikin template: ' + e.message) }
+    setBusy(false)
   }
 
   async function pilihFile(e) {
@@ -178,6 +214,25 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         const r = bacaSheet(XLSX, wb.Sheets[nama], sisi)
         return { nama, error: r.error, kosong: r.kosong, ...(r.baris.length ? klasifikasi(r.baris, sisi, dbKata, sudahDiFile) : { ok: [], lengkap: [], dobel: [], blok: [], warn: [] }) }
       })
+      const pesanKurang = []
+      sheets.forEach(s => {
+        s.lengkap?.forEach(b => {
+          const kolomJp = sisi === 'kanan' ? 'Kalimat JP' : 'Kata JP'
+          const hilang = !b.jp && !b.arti ? `${kolomJp} & Arti` : !b.jp ? kolomJp : 'Arti'
+          pesanKurang.push(`${mode === 'root' ? `Sheet "${s.nama}", ` : ''}baris ${b._no}: ${hilang} kosong`)
+        })
+      })
+      if (pesanKurang.length > 0) {
+        alert(
+          `Maaf, ada ${pesanKurang.length} baris yang belum lengkap. Kata JP dan Arti wajib diisi, lengkapi dulu ya:\n\n` +
+          pesanKurang.slice(0, 15).join('\n') +
+          (pesanKurang.length > 15 ? `\n…dan ${pesanKurang.length - 15} baris lainnya` : '') +
+          '\n\nLengkapi dulu di Excel-nya, lalu upload ulang.'
+        )
+        setBusy(false)
+        return
+      }
+
       setPaksa(false)
       setPreview({ namaFile: file.name, sheets, catatan })
     } catch (err) {
