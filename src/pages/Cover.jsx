@@ -40,6 +40,14 @@ export default function Cover({ goTo, jumlahPaket, jumlahKata, jumlahHariAktif }
           </div>
         </div>
 
+        <div className="nav-card" onClick={() => goTo('radikal')}>
+          <div className="nav-icon">部</div>
+          <div className="nav-info">
+            <div className="nav-title">Tebak Radikal</div>
+            <div className="nav-desc">hafalan &amp; tes bushu/radikal kanji</div>
+          </div>
+        </div>
+
         <div className="nav-card" onClick={() => goTo('paket')}>
           <div className="nav-icon">📚</div>
           <div className="nav-info">
