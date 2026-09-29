@@ -9,12 +9,14 @@ import { supabase } from '../supabaseClient'
 // nggak ambigu pas milih.
 const NAMA_KATEGORI = [
   'Alam & Elemen', 'Tubuh Manusia', 'Hewan', 'Tumbuhan', 'Bangunan & Tempat',
-  'Aksi/Gerakan', 'Makanan', 'Pakaian & Benda', 'Abstrak, Angka & Lainnya',
+  'Aksi/Gerakan', 'Makanan', 'Pakaian & Benda',
+  'Angka & Bentuk Dasar', 'Orang & Keluarga', 'Bahasa & Indra', 'Ukuran & Tempat', 'Lainnya',
 ]
 const EMOJI_KATEGORI = {
   'Alam & Elemen': '🌍', 'Tubuh Manusia': '👤', 'Hewan': '🐾', 'Tumbuhan': '🌱',
-  'Bangunan & Tempat': '🏠', 'Aksi/Gerakan': '✋', 'Makanan': '🍚',
-  'Pakaian & Benda': '👗', 'Abstrak, Angka & Lainnya': '🔤',
+  'Bangunan & Tempat': '🏠', 'Aksi/Gerakan': '✋', 'Makanan': '🍚', 'Pakaian & Benda': '👗',
+  'Angka & Bentuk Dasar': '🔢', 'Orang & Keluarga': '👪', 'Bahasa & Indra': '👂',
+  'Ukuran & Tempat': '📏', 'Lainnya': '✨',
 }
 const RADIKAL = [
   { kategori: 'Alam & Elemen', chars: ['水', '氵', '火', '灬', '木', '土', '山', '石', '田', '谷', '里', '气', '雨', '風', '金', '西', '日', '月', '冫', '厂'] },
@@ -25,14 +27,11 @@ const RADIKAL = [
   { kategori: 'Aksi/Gerakan', chars: ['辶', '走', '攵', '力', '廾', '彳', '癶', '行', '入', '止'] },
   { kategori: 'Makanan', chars: ['食', '飠', '香', '酉', '皿'] },
   { kategori: 'Pakaian & Benda', chars: ['衣', '衤', '糸', '刀', '刂', '弓', '矢', '斤', '戈', '車', '舟', '巾'] },
-  {
-    kategori: 'Abstrak, Angka & Lainnya',
-    chars: [
-      '一', '十', '八', '乙', '丶', '丨', '言', '見', '音', '色', '方', '士', '寸', '卜', '又', '己', '卩', '匕', '厶',
-      '非', '至', '高', '貝', '辛', '鬼', '長', '斉', '青', '頁', '飛', '小', '少', '大', '夕', '女', '子', '父', '母',
-      '曰', '欠', '歹', '殳', '立', '尸', '疒', '疋', '白', '罒', '匚', '几', '工', '巛', '干', '彡', '冂', '阝', '阝',
-    ],
-  },
+  { kategori: 'Angka & Bentuk Dasar', chars: ['一', '十', '八', '乙', '丶', '丨', '匕', '厶', '己', '卩', '又', '卜'] },
+  { kategori: 'Orang & Keluarga', chars: ['女', '子', '父', '母', '小', '少', '大', '夕', '士', '尸'] },
+  { kategori: 'Bahasa & Indra', chars: ['言', '見', '音', '色', '白', '青', '非', '頁'] },
+  { kategori: 'Ukuran & Tempat', chars: ['寸', '方', '至', '高', '長', '干', '立', '工', '匚', '几', '冂', '巛'] },
+  { kategori: 'Lainnya', chars: ['貝', '辛', '鬼', '斉', '飛', '曰', '欠', '歹', '殳', '疒', '疋', '罒', '彡', '阝', '阝'] },
 ]
 
 export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', open = true, onToggle }) {
