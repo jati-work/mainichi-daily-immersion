@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseStorage } from '../supabaseClient'
+import ImportExcel from '../components/ImportExcel'
 
 export default function PaketList({ goTo, openPaket }) {
   const [folders, setFolders] = useState([])
@@ -576,6 +577,11 @@ export default function PaketList({ goTo, openPaket }) {
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#7aaa8a', marginBottom: 8 }}>{label}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           <Breadcrumb currentId={currentId} jejak={jejak} onNavigate={setCurrentId} />
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <ImportExcel
+            mode="root" sisi={sisi} folderId={currentId} onDone={muatData}
+            urutanAwal={items.length ? Math.max(...items.map(i => i.urutan ?? 0)) + 1 : 0}
+          />
           <div style={{ position: 'relative' }} data-tambah-menu>
             <button
               className="icon-btn" title="Tambah folder atau paket"
@@ -606,6 +612,7 @@ export default function PaketList({ goTo, openPaket }) {
                 >📚 Paket baru</button>
               </div>
             )}
+          </div>
           </div>
         </div>
 
