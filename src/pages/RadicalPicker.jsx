@@ -1,124 +1,51 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { urutkanKategori, EMOJI_KATEGORI } from '../data/radikalData'
 
-// Daftar radikal bawaan, dikelompokkan berdasarkan KATEGORI/tema (bukan
-// jumlah goresan). Sengaja cuma nyimpen karakternya doang, TANPA cara baca
-// atau arti -- biar pas dipake buat tes bunshuu tetep active recall, jawaban
-// nggak kebocor lewat tooltip/label.
-// Kombinasi kayak 水/氵 sengaja DIPECAH jadi 2 entri/tombol terpisah biar
-// nggak ambigu pas milih.
-const NAMA_KATEGORI = [
-  'Alam & Elemen', 'Tubuh Manusia', 'Hewan', 'Tumbuhan', 'Bangunan & Tempat',
-  'Aksi/Gerakan', 'Makanan', 'Pakaian & Benda',
-  'Angka & Bentuk Dasar', 'Orang & Keluarga', 'Bahasa & Indra', 'Ukuran & Tempat', 'Lainnya',
-]
-const EMOJI_KATEGORI = {
-  'Alam & Elemen': '🌍', 'Tubuh Manusia': '👤', 'Hewan': '🐾', 'Tumbuhan': '🌱',
-  'Bangunan & Tempat': '🏠', 'Aksi/Gerakan': '✋', 'Makanan': '🍚', 'Pakaian & Benda': '👗',
-  'Angka & Bentuk Dasar': '🔢', 'Orang & Keluarga': '👪', 'Bahasa & Indra': '👂',
-  'Ukuran & Tempat': '📏', 'Lainnya': '✨',
-}
-const RADIKAL = [
-  { kategori: 'Alam & Elemen', chars: ['水', '氵', '火', '灬', '木', '土', '山', '石', '田', '谷', '里', '气', '雨', '風', '金', '西', '日', '月', '冫', '厂'] },
-  { kategori: 'Tubuh Manusia', chars: ['人', '亻', '儿', '心', '忄', '手', '扌', '口', '目', '耳', '足', '身', '首', '面', '血', '骨', '毛', '皮', '牙', '爪', '自', '舌', '氏'] },
-  { kategori: 'Hewan', chars: ['犬', '犭', '牛', '馬', '羊', '魚', '鳥', '隹', '虫', '羽', '角'] },
-  { kategori: 'Tumbuhan', chars: ['艹', '禾', '竹', '米', '豆'] },
-  { kategori: 'Bangunan & Tempat', chars: ['宀', '广', '戸', '門', '囗', '穴', '冖'] },
-  { kategori: 'Aksi/Gerakan', chars: ['辶', '走', '攵', '力', '廾', '彳', '癶', '行', '入', '止'] },
-  { kategori: 'Makanan', chars: ['食', '飠', '香', '酉', '皿'] },
-  { kategori: 'Pakaian & Benda', chars: ['衣', '衤', '糸', '刀', '刂', '弓', '矢', '斤', '戈', '車', '舟', '巾'] },
-  { kategori: 'Angka & Bentuk Dasar', chars: ['一', '十', '八', '乙', '丶', '丨', '匕', '厶', '己', '卩', '又', '卜'] },
-  { kategori: 'Orang & Keluarga', chars: ['女', '子', '父', '母', '小', '少', '大', '夕', '士', '尸'] },
-  { kategori: 'Bahasa & Indra', chars: ['言', '見', '音', '色', '白', '青', '非', '頁'] },
-  { kategori: 'Ukuran & Tempat', chars: ['寸', '方', '至', '高', '長', '干', '立', '工', '匚', '几', '冂', '巛'] },
-  { kategori: 'Lainnya', chars: ['貝', '辛', '鬼', '斉', '飛', '曰', '欠', '歹', '殳', '疒', '疋', '罒', '彡', '阝', '阝'] },
-]
-
+// Keyboard radikal buat isi jawaban tes bunshuu. SENGAJA cuma nampilin
+// karakternya doang (nggak ada arti/menemonik) biar active recall tetep
+// jalan. Nambah/edit/hapus radikal dilakuin di halaman "Tebak Radikal",
+// bukan di sini -- di sini murni buat milih & ketik.
 export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', open = true, onToggle }) {
   const [cari, setCari] = useState('')
-  const [custom, setCustom] = useState([])
-  const [showTambah, setShowTambah] = useState(false)
-  const [showHapus, setShowHapus] = useState(false)
-  const [karakterBaru, setKarakterBaru] = useState('')
-  const [kategoriBaru, setKategoriBaru] = useState(NAMA_KATEGORI[0])
+  const [semua, setSemua] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  async function muatCustom() {
-    const { data } = await supabase.from('custom_radikal').select('*').order('created_at')
-    setCustom(data || [])
-  }
-  useEffect(() => { muatCustom() }, [])
-
-  async function tambahRadikal() {
-    if (!karakterBaru.trim()) { alert('Isi karakternya dulu ya!'); return }
-    const { error } = await supabase.from('custom_radikal').insert({
-      karakter: karakterBaru.trim(), kategori: kategoriBaru,
+  useEffect(() => {
+    if (!open) return
+    let batal = false
+    setLoading(true)
+    supabase.from('radikal').select('id, karakter, kategori').order('created_at').then(({ data }) => {
+      if (!batal) { setSemua(data || []); setLoading(false) }
     })
-    if (error) { alert('Gagal nyimpen: ' + error.message); return }
-    setKarakterBaru('')
-    setShowTambah(false)
-    muatCustom()
-  }
+    return () => { batal = true }
+  }, [open])
 
-  async function hapusCustom(id) {
-    await supabase.from('custom_radikal').delete().eq('id', id)
-    muatCustom()
-  }
-
-  // Gabungin radikal bawaan + custom, dikelompokkan per kategori. Custom
-  // yang kategorinya nggak dikenal (data lama / kosong) ditampung di
-  // kelompok "Lainnya (tambahan)" di akhir, biar nggak hilang begitu aja.
-  const namaDikenal = new Set(NAMA_KATEGORI)
-  const gabungan = NAMA_KATEGORI.map(kategori => {
-    const bawaan = (RADIKAL.find(g => g.kategori === kategori)?.chars || []).map(char => ({ char, custom: false }))
-    const punyaSendiri = custom.filter(c => c.kategori === kategori).map(c => ({ char: c.karakter, custom: true, id: c.id }))
-    return { kategori, items: [...bawaan, ...punyaSendiri] }
+  const kategoriAda = urutkanKategori([...new Set(semua.map(r => r.kategori))])
+  const gabungan = kategoriAda.map(kategori => {
+    const dalamKategori = semua.filter(r => r.kategori === kategori)
+    // Dedup per karakter -- kalau ada 2 baris beda arti tapi karakternya
+    // sama (misal 阝 buat kozato vs oozato), buat KEYBOARD ini cukup satu
+    // tombol aja, soalnya hasil ketikannya bakal sama persis.
+    const unik = []
+    const sudahAda = new Set()
+    dalamKategori.forEach(r => {
+      if (sudahAda.has(r.karakter)) return
+      sudahAda.add(r.karakter)
+      unik.push(r)
+    })
+    return { kategori, items: unik }
   })
-  const customLainnya = custom.filter(c => !namaDikenal.has(c.kategori))
-  if (customLainnya.length > 0) {
-    gabungan.push({ kategori: 'Lainnya (tambahan)', items: customLainnya.map(c => ({ char: c.karakter, custom: true, id: c.id })) })
-  }
-
   const filtered = gabungan.map(grup => ({
     ...grup,
-    items: grup.items.filter(it => !cari || it.char.includes(cari)),
+    items: grup.items.filter(it => !cari || it.karakter.includes(cari)),
   })).filter(grup => grup.items.length > 0)
 
   const isi = (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#2d6a4a' }}>部首 Radikal</div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => { setShowTambah(s => !s); setShowHapus(false) }}
-            style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1.5px solid #b8d8b8', background: showTambah ? '#2d6a4a' : '#fff', color: showTambah ? '#fff' : '#2d6a4a', cursor: 'pointer' }}>
-            ＋ Tambah
-          </button>
-          <button onClick={() => { setShowHapus(s => !s); setShowTambah(false) }}
-            style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, border: '1.5px solid #d8b8b8', background: showHapus ? '#c0392b' : '#fff', color: showHapus ? '#fff' : '#c0392b', cursor: 'pointer' }}>
-            🗑️ Hapus
-          </button>
-        </div>
       </div>
-      {showHapus && (
-        <div style={{ fontSize: 11, color: '#c0392b', marginBottom: 8, textAlign: 'center' }}>
-          Klik radikal tambahan kamu (warna beda) buat hapus
-        </div>
-      )}
-
-      {showTambah && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10, padding: 10, background: '#f0f7f0', borderRadius: 8 }}>
-          <input placeholder="Karakter" value={karakterBaru} onChange={e => setKarakterBaru(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && tambahRadikal()}
-            style={{ width: '100%', padding: 8, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 13, boxSizing: 'border-box' }} />
-          <select value={kategoriBaru} onChange={e => setKategoriBaru(e.target.value)}
-            style={{ width: '100%', padding: 8, borderRadius: 6, border: '1.5px solid #b8d8b8', fontSize: 13, boxSizing: 'border-box' }}>
-            {NAMA_KATEGORI.map(k => <option key={k} value={k}>{EMOJI_KATEGORI[k]} {k}</option>)}
-          </select>
-          <button onClick={tambahRadikal}
-            style={{ width: '100%', padding: 8, borderRadius: 6, border: 'none', background: '#2d6a4a', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            Simpan
-          </button>
-        </div>
-      )}
 
       <input
         placeholder="Cari karakter radikal..."
@@ -128,37 +55,31 @@ export default function RadicalPicker({ onPilih, onClose, variant = 'overlay', o
       />
 
       <div style={{ overflowY: 'auto', flex: 1, padding: '0 3px', margin: '0 -3px' }}>
-        {filtered.map(grup => (
+        {loading && <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: 20 }}>Memuat...</div>}
+        {!loading && filtered.map(grup => (
           <div key={grup.kategori} style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 10, color: '#9abaa8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
               {EMOJI_KATEGORI[grup.kategori] || '✨'} {grup.kategori}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {grup.items.map((it, i) => (
+              {grup.items.map(it => (
                 <button
-                  key={it.id || `${it.char}-${i}`}
-                  onClick={() => {
-                    if (showHapus) { if (it.custom) hapusCustom(it.id); return }
-                    onPilih(it.char)
-                  }}
+                  key={it.id}
+                  onClick={() => onPilih(it.karakter)}
                   style={{
                     fontFamily: "'Noto Serif JP', serif", fontSize: 18, padding: '5px 8px',
-                    borderRadius: 8, cursor: 'pointer',
-                    border: '1.5px solid #b8d8b8', background: '#f0f7f0',
-                    opacity: showHapus && !it.custom ? 0.4 : 1,
-                    outline: showHapus && it.custom ? '2px solid #c0392b' : 'none',
-                    outlineOffset: 1,
+                    borderRadius: 8, cursor: 'pointer', border: '1.5px solid #b8d8b8', background: '#f0f7f0',
                   }}
                 >
-                  {it.char}
+                  {it.karakter}
                 </button>
               ))}
             </div>
           </div>
         ))}
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: 20 }}>
-            Gak ketemu radikal itu.
+            {semua.length === 0 ? 'Belum ada radikal. Tambahin dulu di halaman Tebak Radikal.' : 'Gak ketemu radikal itu.'}
           </div>
         )}
       </div>
