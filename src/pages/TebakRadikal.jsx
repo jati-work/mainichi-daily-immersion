@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import RadicalPicker from '../components/RadicalPicker'
+import RadicalPicker from './RadicalPicker'
 import { urutkanKategori, EMOJI_KATEGORI } from '../data/radikalData'
 
 function normalisasiID(s) {
