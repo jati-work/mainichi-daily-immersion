@@ -18,7 +18,7 @@ function shuffle(arr) {
 // Kartu radikal -- sengaja cuma nampilin karakter (depan) & arti (belakang).
 // "menemonik" TIDAK dipajang di sini sama sekali, sama kayak "bunshuu" yang
 // nggak dipajang di kartu kata; dia cuma ada di form isian.
-function KartuRadikal({ r, isFlipped, editMode, hapusMode, onClick, onToggleHafal, onCari }) {
+function KartuRadikal({ r, isFlipped, editMode, hapusMode, onClick, onToggleHafal }) {
   return (
     <div className={`card ${isFlipped ? 'flipped' : ''} ${r.hafal ? 'hafal' : ''}`}>
       <div
@@ -36,11 +36,6 @@ function KartuRadikal({ r, isFlipped, editMode, hapusMode, onClick, onToggleHafa
         </div>
       </div>
       <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); onToggleHafal(r) }}>✓</button>
-      <button
-        className="hafal-toggle" title="Cari radikal ini di kotoba (Buku)"
-        style={{ left: 6, right: 'auto', background: '#fff', color: '#2d6a4a', border: '1.5px solid #b8d8b8' }}
-        onClick={(e) => { e.stopPropagation(); onCari(r.karakter) }}
-      >🔍</button>
     </div>
   )
 }
@@ -213,9 +208,15 @@ export default function TebakRadikal({ goTo, openPaket }) {
   }
 
   function startTes(dir) {
-    const sumber = (kategoriAktif !== 'all' ? radikalList.filter(r => r.kategori === kategoriAktif) : radikalList)
+    let sumber = (kategoriAktif !== 'all' ? radikalList.filter(r => r.kategori === kategoriAktif) : radikalList)
       .filter(r => !r.hafal)
-    if (sumber.length === 0) { alert('Tidak ada radikal yang sesuai buat mode tes ini!'); return }
+    if (dir.startsWith('menemonik')) sumber = sumber.filter(r => r.menemonik && r.menemonik.trim())
+    if (sumber.length === 0) {
+      alert(dir.startsWith('menemonik')
+        ? 'Belum ada radikal yang menemoniknya diisi. Isi dulu lewat "＋ Radikal" / "✏️ Edit".'
+        : 'Tidak ada radikal yang sesuai buat mode tes ini!')
+      return
+    }
     tutupPanelLain()
     const words = shuffle(sumber)
     setTes({ dir, words, idx: 0, correct: 0, wrong: 0, benarIds: [], answered: false, input: '', salah: false })
@@ -224,7 +225,8 @@ export default function TebakRadikal({ goTo, openPaket }) {
     if (!tes || tes.answered || !tes.input.trim()) return
     const w = tes.words[tes.idx]
     const val = tes.input.trim()
-    const benar = tes.dir === 'radikal-arti'
+    const jawabArti = tes.dir === 'radikal-arti' || tes.dir === 'menemonik-arti'
+    const benar = jawabArti
       ? w.arti.split(/[/;]/).map(normalisasiID).some(p => p === normalisasiID(val))
       : val === w.karakter
     setTes(t => ({
@@ -287,6 +289,9 @@ export default function TebakRadikal({ goTo, openPaket }) {
               <div style={{ fontSize: 10, color: '#9abaa8', padding: '2px 6px', letterSpacing: '.06em', textTransform: 'uppercase' }}>Soal → Jawaban</div>
               <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('radikal-arti'); setShowTesMenu(false) }}>Radikal → Arti</button>
               <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-radikal'); setShowTesMenu(false) }}>Arti → Radikal</button>
+              <div style={{ fontSize: 10, color: '#9abaa8', padding: '6px 6px 2px', letterSpacing: '.06em', textTransform: 'uppercase', borderTop: '1px solid #f0f0f0', marginTop: 2 }}>Pakai Menemonik</div>
+              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('menemonik-radikal'); setShowTesMenu(false) }}>Menemonik → Radikal</button>
+              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('menemonik-arti'); setShowTesMenu(false) }}>Menemonik → Arti</button>
             </div>
           )}
         </div>
@@ -379,7 +384,7 @@ export default function TebakRadikal({ goTo, openPaket }) {
             {!loading && !groupedView && (
               <div className="card-grid">
                 {displayList.map(r => (
-                  <KartuRadikal key={r.id} r={r} isFlipped={flipped.has(r.id)} editMode={editMode} hapusMode={hapusMode} onClick={() => klikKartu(r)} onToggleHafal={toggleHafal} onCari={setCariKotoba} />
+                  <KartuRadikal key={r.id} r={r} isFlipped={flipped.has(r.id)} editMode={editMode} hapusMode={hapusMode} onClick={() => klikKartu(r)} onToggleHafal={toggleHafal} />
                 ))}
               </div>
             )}
@@ -394,7 +399,7 @@ export default function TebakRadikal({ goTo, openPaket }) {
                   </div>
                   <div className="card-grid">
                     {items.map(r => (
-                      <KartuRadikal key={r.id} r={r} isFlipped={flipped.has(r.id)} editMode={editMode} hapusMode={hapusMode} onClick={() => klikKartu(r)} onToggleHafal={toggleHafal} onCari={setCariKotoba} />
+                      <KartuRadikal key={r.id} r={r} isFlipped={flipped.has(r.id)} editMode={editMode} hapusMode={hapusMode} onClick={() => klikKartu(r)} onToggleHafal={toggleHafal} />
                     ))}
                   </div>
                 </div>
@@ -413,7 +418,7 @@ export default function TebakRadikal({ goTo, openPaket }) {
       {tes && (
         <div className="modal-overlay open">
           <div className="modal-box" style={{ maxWidth: 380 }}>
-            {tes.dir === 'arti-radikal' && !selesai && (
+            {(tes.dir === 'arti-radikal' || tes.dir === 'menemonik-radikal') && !selesai && (
               <RadicalPicker
                 variant="panel"
                 open={showPickerTes}
@@ -422,53 +427,62 @@ export default function TebakRadikal({ goTo, openPaket }) {
                 onPilih={(k) => { setTes(t => ({ ...t, input: k })); setShowPickerTes(false) }}
               />
             )}
-            {!selesai ? (
-              <>
-                <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{tes.idx + 1} / {tes.words.length} · ✓ {tes.correct} · ✗ {tes.wrong}</div>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>
-                  {tes.dir === 'radikal-arti' ? 'Tulis Artinya:' : 'Pilih Radikalnya (tab 部首 di kanan):'}
-                </div>
-                <div style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, fontWeight: 600, marginBottom: 14, textAlign: 'center' }}>
-                  {tes.dir === 'radikal-arti' ? tes.words[tes.idx].karakter : tes.words[tes.idx].arti}
-                </div>
-                {tes.dir === 'radikal-arti' ? (
-                  <input
-                    autoFocus value={tes.input} disabled={tes.answered}
-                    onChange={e => setTes(t => ({ ...t, input: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && (tes.answered ? tesLanjut() : tesCek())}
-                    style={{
-                      textAlign: 'center', fontSize: 18,
-                      borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : undefined,
-                    }}
-                  />
-                ) : (
-                  <div
-                    onClick={() => !tes.answered && setShowPickerTes(true)}
-                    style={{
-                      textAlign: 'center', fontSize: 28, fontFamily: "'Noto Serif JP', serif", padding: '14px 0',
-                      border: '1.5px solid #b8d8b8', borderRadius: 10, marginBottom: 4, boxSizing: 'border-box',
-                      cursor: tes.answered ? 'default' : 'pointer', color: tes.input ? '#222' : '#b8c8b8',
-                      borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : '#b8d8b8',
-                    }}
-                  >
-                    {tes.input || 'klik di sini / buka tab 部首'}
+            {!selesai ? (() => {
+              const w = tes.words[tes.idx]
+              const jawabRadikal = tes.dir === 'arti-radikal' || tes.dir === 'menemonik-radikal'
+              const soal = tes.dir === 'radikal-arti' ? w.karakter : tes.dir === 'arti-radikal' ? w.arti : w.menemonik
+              const labelSoal = tes.dir === 'radikal-arti' ? 'Radikal' : tes.dir === 'arti-radikal' ? 'Arti' : 'Menemonik'
+              return (
+                <>
+                  <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{tes.idx + 1} / {tes.words.length} · ✓ {tes.correct} · ✗ {tes.wrong}</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>
+                    {labelSoal} → {jawabRadikal ? 'Pilih Radikalnya (tab 部首 di kanan):' : 'Tulis Artinya:'}
                   </div>
-                )}
-                {tes.answered && tes.salah && (
-                  <div style={{ textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8, marginTop: 6 }}>
-                    Jawaban: <b style={{ fontFamily: "'Noto Serif JP', serif" }}>
-                      {tes.dir === 'radikal-arti' ? tes.words[tes.idx].arti : tes.words[tes.idx].karakter}
-                    </b>
+                  <div style={{
+                    fontFamily: tes.dir === 'radikal-arti' ? "'Noto Serif JP', serif" : undefined,
+                    fontSize: tes.dir === 'radikal-arti' ? 24 : 17, fontWeight: 600, marginBottom: 14, textAlign: 'center',
+                  }}>
+                    {soal}
                   </div>
-                )}
-                <div className="modal-btns">
-                  <button onClick={tutupTes}>Tutup</button>
-                  <button className="confirm" onClick={tes.answered ? tesLanjut : tesCek}>
-                    {tes.answered ? (tes.idx + 1 >= tes.words.length ? 'Lihat Hasil' : 'Lanjut →') : 'Cek Jawaban'}
-                  </button>
-                </div>
-              </>
-            ) : (
+                  {jawabRadikal ? (
+                    <div
+                      onClick={() => !tes.answered && setShowPickerTes(true)}
+                      style={{
+                        textAlign: 'center', fontSize: 28, fontFamily: "'Noto Serif JP', serif", padding: '14px 0',
+                        border: '1.5px solid #b8d8b8', borderRadius: 10, marginBottom: 4, boxSizing: 'border-box',
+                        cursor: tes.answered ? 'default' : 'pointer', color: tes.input ? '#222' : '#b8c8b8',
+                        borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : '#b8d8b8',
+                      }}
+                    >
+                      {tes.input || 'klik di sini / buka tab 部首'}
+                    </div>
+                  ) : (
+                    <input
+                      autoFocus value={tes.input} disabled={tes.answered}
+                      onChange={e => setTes(t => ({ ...t, input: e.target.value }))}
+                      onKeyDown={e => e.key === 'Enter' && (tes.answered ? tesLanjut() : tesCek())}
+                      style={{
+                        textAlign: 'center', fontSize: 18,
+                        borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : undefined,
+                      }}
+                    />
+                  )}
+                  {tes.answered && tes.salah && (
+                    <div style={{ textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8, marginTop: 6 }}>
+                      Jawaban: <b style={{ fontFamily: jawabRadikal ? "'Noto Serif JP', serif" : undefined }}>
+                        {jawabRadikal ? w.karakter : w.arti}
+                      </b>
+                    </div>
+                  )}
+                  <div className="modal-btns">
+                    <button onClick={tutupTes}>Tutup</button>
+                    <button className="confirm" onClick={tes.answered ? tesLanjut : tesCek}>
+                      {tes.answered ? (tes.idx + 1 >= tes.words.length ? 'Lihat Hasil' : 'Lanjut →') : 'Cek Jawaban'}
+                    </button>
+                  </div>
+                </>
+              )
+            })() : (
               <>
                 <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 6 }}>{tes.correct / tes.words.length >= 0.8 ? '🎉' : tes.correct / tes.words.length >= 0.5 ? '💪' : '📚'}</div>
                 <div style={{ fontSize: 32, fontWeight: 700, textAlign: 'center', marginBottom: 6 }}>{tes.correct}/{tes.words.length}</div>
