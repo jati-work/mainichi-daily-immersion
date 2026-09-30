@@ -18,7 +18,7 @@ function shuffle(arr) {
 // Kartu radikal -- sengaja cuma nampilin karakter (depan) & arti (belakang).
 // "menemonik" TIDAK dipajang di sini sama sekali, sama kayak "bunshuu" yang
 // nggak dipajang di kartu kata; dia cuma ada di form isian.
-function KartuRadikal({ r, isFlipped, editMode, hapusMode, onClick, onToggleHafal }) {
+function KartuRadikal({ r, isFlipped, editMode, hapusMode, onClick, onToggleHafal, onCari }) {
   return (
     <div className={`card ${isFlipped ? 'flipped' : ''} ${r.hafal ? 'hafal' : ''}`}>
       <div
@@ -36,11 +36,16 @@ function KartuRadikal({ r, isFlipped, editMode, hapusMode, onClick, onToggleHafa
         </div>
       </div>
       <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); onToggleHafal(r) }}>✓</button>
+      <button
+        className="hafal-toggle" title="Cari radikal ini di kotoba (Buku)"
+        style={{ left: 6, right: 'auto', background: '#fff', color: '#2d6a4a', border: '1.5px solid #b8d8b8' }}
+        onClick={(e) => { e.stopPropagation(); onCari(r.karakter) }}
+      >🔍</button>
     </div>
   )
 }
 
-export default function TebakRadikal({ goTo }) {
+export default function TebakRadikal({ goTo, openPaket }) {
   const [radikalList, setRadikalList] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -51,6 +56,10 @@ export default function TebakRadikal({ goTo }) {
   const [randomOrder, setRandomOrder] = useState(new Map())
   const [sembunyikan, setSembunyikan] = useState(false)
   const [tampilkanHafal, setTampilkanHafal] = useState(false)
+
+  const [cariKotoba, setCariKotoba] = useState('')
+  const [hasilKotoba, setHasilKotoba] = useState([])
+  const [cariLoading, setCariLoading] = useState(false)
 
   const [editMode, setEditMode] = useState(false)
   const [hapusMode, setHapusMode] = useState(false)
@@ -73,6 +82,23 @@ export default function TebakRadikal({ goTo }) {
     setLoading(false)
   }
   useEffect(() => { muatData() }, [])
+
+  // Cari kotoba yang field bunshuu-nya nyebut radikal ini. Cuma jalan di
+  // kolom Buku, soalnya field bunshuu emang cuma ada di form kata Buku.
+  useEffect(() => {
+    const term = cariKotoba.trim()
+    if (!term) { setHasilKotoba([]); setCariLoading(false); return }
+    setCariLoading(true)
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('kata').select('id, jp, arti, bunshuu, paket:paket_id (id, nama)')
+        .ilike('bunshuu', `%${term}%`)
+        .limit(50)
+      setHasilKotoba(data || [])
+      setCariLoading(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [cariKotoba])
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -303,38 +329,84 @@ export default function TebakRadikal({ goTo }) {
         </div>
       )}
 
-      <div className="grid-wrap">
-        {loading && <div style={{ textAlign: 'center', color: '#9abaa8', padding: 40, fontSize: 13 }}>Memuat...</div>}
-
-        {!loading && !groupedView && (
-          <div className="card-grid">
-            {displayList.map(r => (
-              <KartuRadikal key={r.id} r={r} isFlipped={flipped.has(r.id)} editMode={editMode} hapusMode={hapusMode} onClick={() => klikKartu(r)} onToggleHafal={toggleHafal} />
-            ))}
+      <div style={{ padding: '10px 12px 0' }}>
+        <input
+          className="input-search"
+          placeholder="🔍 Cari radikal ini di kotoba (cek bunshuu-nya)..."
+          value={cariKotoba}
+          onChange={e => setCariKotoba(e.target.value)}
+          style={{ fontFamily: "'Noto Serif JP', serif" }}
+        />
+        {cariKotoba.trim() && (
+          <div style={{ fontSize: 11, color: '#9abaa8', margin: '4px 2px 0' }}>
+            Nyari di field <b>Bunshuu</b> kotoba Buku ·{' '}
+            <span style={{ textDecoration: 'underline', cursor: 'pointer' }} onClick={() => setCariKotoba('')}>batalin pencarian</span>
           </div>
         )}
+      </div>
 
-        {!loading && groupedView && kategoriTersedia.map(k => {
-          const items = displayList.filter(r => r.kategori === k)
-          if (items.length === 0) return null
-          return (
-            <div key={k} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#7aaa8a', padding: '8px 4px 4px' }}>
-                {EMOJI_KATEGORI[k] || '✨'} {k}
+      <div className="grid-wrap">
+        {cariKotoba.trim() ? (
+          <>
+            {cariLoading && <div style={{ textAlign: 'center', color: '#9abaa8', padding: 20, fontSize: 13 }}>Mencari...</div>}
+            {!cariLoading && hasilKotoba.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: '20px 0' }}>
+                Gak ada kotoba yang bunshuu-nya nyebut "{cariKotoba}"
               </div>
+            )}
+            {!cariLoading && hasilKotoba.map(k => (
+              <div
+                key={k.id} className="paket-row" style={{ cursor: k.paket ? 'pointer' : 'default' }}
+                onClick={() => k.paket && openPaket && openPaket(k.paket.id)}
+              >
+                <div className="info">
+                  <div className="nama">
+                    <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.jp}</span>
+                  </div>
+                  <div className="meta">
+                    <span>{k.arti}</span>
+                    {k.paket && <span> · di paket "{k.paket.nama}"</span>}
+                    <span> · bunshuu: {k.bunshuu}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </>
+        ) : (
+          <>
+            {loading && <div style={{ textAlign: 'center', color: '#9abaa8', padding: 40, fontSize: 13 }}>Memuat...</div>}
+
+            {!loading && !groupedView && (
               <div className="card-grid">
-                {items.map(r => (
-                  <KartuRadikal key={r.id} r={r} isFlipped={flipped.has(r.id)} editMode={editMode} hapusMode={hapusMode} onClick={() => klikKartu(r)} onToggleHafal={toggleHafal} />
+                {displayList.map(r => (
+                  <KartuRadikal key={r.id} r={r} isFlipped={flipped.has(r.id)} editMode={editMode} hapusMode={hapusMode} onClick={() => klikKartu(r)} onToggleHafal={toggleHafal} onCari={setCariKotoba} />
                 ))}
               </div>
-            </div>
-          )
-        })}
+            )}
 
-        {!loading && displayList.length === 0 && (
-          <div style={{ textAlign: 'center', color: '#9abaa8', padding: 40, fontSize: 13 }}>
-            {radikalList.length === 0 ? 'Belum ada radikal. Klik "＋ Radikal" buat mulai nambahin.' : 'Nggak ada radikal di filter ini.'}
-          </div>
+            {!loading && groupedView && kategoriTersedia.map(k => {
+              const items = displayList.filter(r => r.kategori === k)
+              if (items.length === 0) return null
+              return (
+                <div key={k} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#7aaa8a', padding: '8px 4px 4px' }}>
+                    {EMOJI_KATEGORI[k] || '✨'} {k}
+                  </div>
+                  <div className="card-grid">
+                    {items.map(r => (
+                      <KartuRadikal key={r.id} r={r} isFlipped={flipped.has(r.id)} editMode={editMode} hapusMode={hapusMode} onClick={() => klikKartu(r)} onToggleHafal={toggleHafal} onCari={setCariKotoba} />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+
+            {!loading && displayList.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#9abaa8', padding: 40, fontSize: 13 }}>
+                {radikalList.length === 0 ? 'Belum ada radikal. Klik "＋ Radikal" buat mulai nambahin.' : 'Nggak ada radikal di filter ini.'}
+              </div>
+            )}
+          </>
         )}
       </div>
 
