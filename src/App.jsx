@@ -80,7 +80,7 @@ export default function App() {
     return <Jurnal goTo={goTo} />
   }
   if (page === 'radikal') {
-    return <TebakRadikal goTo={goTo} />
+    return <TebakRadikal goTo={goTo} openPaket={openPaket} />
   }
   return (
     <Cover
