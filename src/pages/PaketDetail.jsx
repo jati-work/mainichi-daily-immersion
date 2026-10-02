@@ -474,27 +474,6 @@ export default function PaketDetail({ paketId, goTo }) {
     muatSemua()
   }
 
-  // export kata yang udah hafal di paket ini aja (format sama kayak tombol MD di halaman utama)
-  function exportMdPaket() {
-    const items = []
-    ;[...kataList].filter(k => k.hafal).sort((x, y) => urutanEfektif(x) - urutanEfektif(y)).forEach(k => {
-      if (sisiPaket === 'kanan') {
-        String(k.kata_baru || '').split(',').map(w => w.trim()).filter(Boolean).forEach(w => items.push({ jp: w, arti: '' }))
-      } else items.push({ jp: k.jp, arti: k.arti })
-    })
-    if (items.length === 0) { alert('Belum ada kata yang hafal di paket ini!'); return }
-    const tgl = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-    let txt = `Kosakata Immersion — Daftar Hafalan\nDiekspor: ${tgl} · ${items.length} kata\n\n**${paket.nama}**\n`
-    items.forEach(it => { txt += it.arti ? `${it.jp} — ${it.arti}\n` : `${it.jp}\n` })
-    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const el = document.createElement('a')
-    el.href = url
-    el.download = `hafalan-${paket.nama.replace(/[^\w\u3040-\u30ff\u4e00-\u9faf-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.txt`
-    el.click()
-    URL.revokeObjectURL(url)
-  }
-
   async function resetHafalan() {
     tutupPanelLain()
     if (!confirm('Yakin mau reset semua hafalan di paket ini? Semua kata bakal balik jadi belum hafal.')) return
@@ -877,8 +856,7 @@ async function hapusPdf() {
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
         <button className={`act-btn ${adaIsiDiary ? 'active' : ''}`} onClick={bukaDiary} title="Buku Diary">📔</button>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
-        <button className="act-btn" onClick={exportMdPaket} title="Download hafalan paket ini (MD/TXT)" style={{ fontWeight: 700 }}>MD</button>
-        <ImportExcel mode="paket" sisi={sisiPaket} paketId={paketId} bagianList={bagianList} onDone={muatSemua} kecil />
+        <ImportExcel mode="paket" sisi={sisiPaket} paketId={paketId} bagianList={bagianList} kataList={kataList} namaPaket={paket.nama} onDone={muatSemua} kecil />
         <div style={{ position: 'relative' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya">⋯</button>
           {showMenu && (
