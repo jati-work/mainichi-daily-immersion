@@ -21,6 +21,12 @@ const KOLOM = {
   ],
 }
 const SEMUA_FIELD = ['jp', 'arti', 'bagian', 'contoh_kalimat', 'bunshuu', 'konteks', 'nuansa', 'kata_baru']
+// id & hafal dibaca TERPISAH dari SEMUA_FIELD -- cuma relevan buat file hasil
+// "Export semua kata" yang nanti di-upload ulang buat UPDATE, bukan buat
+// template kosong (makanya nggak ikut nongol di KOLOM/template).
+const ALIAS_ID = ['id']
+const ALIAS_HAFAL = ['hafal', 'sudahhafal', 'statushafal']
+const nilaiYa = v => ['ya', 'yes', 'true', '1', 'v', '✓', 'sudah'].includes(String(v).trim().toLowerCase())
 
 // sama persis dengan normalisasiJP di PaketDetail.jsx
 function normJP(s) {
@@ -62,7 +68,7 @@ async function ambilSemuaKata() {
   const semua = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
-      .from('kata').select('id, jp, kata_baru, paket:paket_id (nama, tanggal)').range(from, from + 999)
+      .from('kata').select('id, jp, kata_baru, paket_id, paket:paket_id (nama, tanggal)').range(from, from + 999)
     if (error) throw error
     semua.push(...(data || []))
     if (!data || data.length < 1000) break
@@ -76,9 +82,12 @@ function bacaSheet(XLSX, ws, sisi) {
   const barisHeader = aoa.findIndex(r => r.some(c => String(c).trim() !== ''))
   if (barisHeader === -1) return { kosong: true, baris: [] }
   const peta = {} // field -> index kolom
+  let kolomId, kolomHafal
   aoa[barisHeader].forEach((h, i) => {
     const k = kunciHeader(h)
     KOLOM[sisi].forEach(c => { if (peta[c.field] === undefined && c.alias.includes(k)) peta[c.field] = i })
+    if (kolomId === undefined && ALIAS_ID.includes(k)) kolomId = i
+    if (kolomHafal === undefined && ALIAS_HAFAL.includes(k)) kolomHafal = i
   })
   const hilang = KOLOM[sisi].filter(c => c.wajib && peta[c.field] === undefined).map(c => c.judul)
   if (hilang.length) return { error: `Kolom ${hilang.join(' & ')} nggak ketemu di baris pertama`, baris: [] }
@@ -87,6 +96,8 @@ function bacaSheet(XLSX, ws, sisi) {
     if (r.every(c => String(c).trim() === '')) return
     const o = { _no: barisHeader + i + 2 }
     SEMUA_FIELD.forEach(f => { o[f] = peta[f] !== undefined ? String(r[peta[f]] ?? '').trim() : '' })
+    o.id = kolomId !== undefined ? String(r[kolomId] ?? '').trim() : ''
+    o.hafal = kolomHafal !== undefined ? nilaiYa(r[kolomHafal]) : undefined
     baris.push(o)
   })
   return { baris }
@@ -96,7 +107,7 @@ function bacaSheet(XLSX, ws, sisi) {
 // aturan sama kayak input manual di PaketDetail:
 //  - Harian: kalimat persis sama = diblok total; kata_baru yang udah ada = peringatan (boleh dipaksa)
 //  - Buku: kata yang udah ada = peringatan (boleh dipaksa)
-function klasifikasi(baris, sisi, dbKata, sudahDiFile) {
+function klasifikasi(baris, sisi, dbKata, sudahDiFile, idSaatIni) {
   const dbJp = new Map()   // normJP(jp) -> [info]
   const dbTag = new Map()  // normJP(tag kata_baru) -> [info]
   const tambah = (m, k, info) => { if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(info) }
@@ -105,9 +116,13 @@ function klasifikasi(baris, sisi, dbKata, sudahDiFile) {
     tambah(dbJp, normJP(r.jp), info)
     pecahTag(r.kata_baru).forEach(t => tambah(dbTag, normJP(t), info))
   })
-  const hasil = { ok: [], lengkap: [], dobel: [], blok: [], warn: [] }
+  const hasil = { ok: [], lengkap: [], dobel: [], blok: [], warn: [], update: [] }
   baris.forEach(b => {
     if (!b.jp || !b.arti) { hasil.lengkap.push(b); return }
+    // kalau kolom ID-nya cocok sama kata yang emang udah ada di paket ini,
+    // ini mode UPDATE -- langsung dianggap sah, skip semua cek duplikat
+    // (karena dia MEMANG baris kata itu sendiri, cuma lagi diedit).
+    if (b.id && idSaatIni && idSaatIni.has(b.id)) { hasil.update.push(b); return }
     const kunci = normJP(b.jp)
     if (sudahDiFile.has(kunci)) { hasil.dobel.push(b); return }
     sudahDiFile.add(kunci)
@@ -132,7 +147,7 @@ function ringkasDi(di) {
 // ---------- komponen ----------
 // mode 'paket' : masukin ke paket yang lagi dibuka (butuh paketId + bagianList)
 // mode 'root'  : bikin paket baru dari tiap sheet di folder aktif (butuh folderId + urutanAwal)
-export default function ImportExcel({ mode, sisi, paketId, bagianList = [], folderId = null, urutanAwal = 0, onDone, style, kecil: tombolKecil = false }) {
+export default function ImportExcel({ mode, sisi, paketId, bagianList = [], folderId = null, urutanAwal = 0, onDone, style, kecil: tombolKecil = false, kataList = null, namaPaket = '' }) {
   const [menu, setMenu] = useState(false)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState(null)
@@ -194,6 +209,60 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
     setBusy(false)
   }
 
+  // Export SEMUA kata di paket ini (hafal atau belum, nggak difilter) ke
+  // Excel, lengkap sama kolom ID & Hafal yang tersembunyi maksudnya -- biar
+  // kalau file ini diedit terus di-upload balik lewat "Pilih file Excel",
+  // baris yang ID-nya cocok otomatis di-UPDATE, bukan dianggap baru.
+  async function exportSemuaKata() {
+    setMenu(false)
+    if (!kataList || kataList.length === 0) { alert('Belum ada kata di paket ini buat di-export.'); return }
+    setBusy(true)
+    try {
+      const ExcelJS = await loadExcelJS()
+      const kolom = KOLOM[sisi]
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Kata')
+      const semuaKolom = [
+        { judul: 'ID', wch: 10 },
+        ...kolom.map(c => ({ judul: c.judul, wch: c.field === 'jp' || c.field === 'arti' ? 28 : 20 })),
+        { judul: 'Hafal', wch: 10 },
+      ]
+      ws.columns = semuaKolom.map(c => ({ header: c.judul, width: c.wch }))
+      ws.getRow(1).font = { bold: true, color: { argb: 'FF2D6A4A' } }
+      ws.getColumn(1).font = { color: { argb: 'FFB8C8B8' }, italic: true } // kolom ID diredupin, bukan buat diisi tangan
+
+      ;[...kataList].sort((a, b) => (a.urutan ?? 0) - (b.urutan ?? 0)).forEach(k => {
+        const baris = [k.id, ...kolom.map(c => k[c.field] ?? ''), k.hafal ? 'Ya' : '']
+        ws.addRow(baris)
+      })
+
+      const wsP = wb.addWorksheet('Petunjuk')
+      wsP.columns = [{ width: 100 }]
+      ;[
+        'Petunjuk export',
+        '',
+        `Isi: SEMUA kata di paket "${namaPaket}" (hafal maupun belum), total ${kataList.length} kata.`,
+        'Boleh diedit bebas buat ngebenerin typo, nambah/isi kolom opsional, dsb.',
+        'Kolom ID JANGAN diubah/dihapus -- itu yang bikin baris ini ke-detect sebagai kata YANG SAMA pas di-upload balik, jadi hasilnya UPDATE bukan nambah data baru/dobel.',
+        'Kalau mau nambah kata baru: tambah baris baru di bawah, kosongin aja kolom ID-nya.',
+        'Kolom Hafal: isi "Ya" kalau udah hafal, kosongin kalau belum.',
+        'Upload balik file ini lewat tombol yang sama > "Pilih file Excel".',
+      ].forEach(t => wsP.addRow([t]))
+      wsP.getRow(1).font = { bold: true, size: 13, color: { argb: 'FF2D6A4A' } }
+
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const namaFile = (namaPaket || 'kotoba').replace(/[^\w\u3040-\u30ff\u4e00-\u9faf-]+/g, '_')
+      a.download = `kotoba-${namaFile}-${new Date().toISOString().slice(0, 10)}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) { alert('Gagal export: ' + e.message) }
+    setBusy(false)
+  }
+
   async function pilihFile(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -209,10 +278,11 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         namaSheet = namaSheet.slice(0, 1)
       }
       const dbKata = await ambilSemuaKata()
+      const idSaatIni = mode === 'paket' ? new Set(dbKata.filter(r => r.paket_id === paketId).map(r => r.id)) : null
       const sudahDiFile = new Set()
       const sheets = namaSheet.map(nama => {
         const r = bacaSheet(XLSX, wb.Sheets[nama], sisi)
-        return { nama, error: r.error, kosong: r.kosong, ...(r.baris.length ? klasifikasi(r.baris, sisi, dbKata, sudahDiFile) : { ok: [], lengkap: [], dobel: [], blok: [], warn: [] }) }
+        return { nama, error: r.error, kosong: r.kosong, ...(r.baris.length ? klasifikasi(r.baris, sisi, dbKata, sudahDiFile, idSaatIni) : { ok: [], lengkap: [], dobel: [], blok: [], warn: [], update: [] }) }
       })
       const pesanKurang = []
       sheets.forEach(s => {
@@ -241,17 +311,31 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
     setBusy(false)
   }
 
-  const hitungMasuk = s => s.ok.length + (paksa ? s.warn.length : 0)
+  const hitungMasuk = s => s.ok.length + (paksa ? s.warn.length : 0) + s.update.length
 
   async function jalankan() {
     setBusy(true)
-    let paketBaru = 0, kataMasuk = 0
+    let paketBaru = 0, kataMasuk = 0, kataUpdate = 0
     try {
       for (const s of preview.sheets) {
+        if (s.update.length > 0) {
+          for (const u of s.update) {
+            const payloadUpdate = {
+              jp: u.jp, arti: u.arti, bagian: u.bagian || '',
+              contoh_kalimat: u.contoh_kalimat, bunshuu: u.bunshuu,
+              konteks: u.konteks, nuansa: u.nuansa, kata_baru: u.kata_baru,
+            }
+            if (u.hafal !== undefined) payloadUpdate.hafal = u.hafal
+            const { error } = await supabase.from('kata').update(payloadUpdate).eq('id', u.id)
+            if (error) throw new Error(`Gagal update kata (ID ${u.id}): ${error.message}`)
+            kataUpdate++
+          }
+        }
         const rows = [...s.ok, ...(paksa ? s.warn : [])]
-        if (rows.length === 0) continue
+        if (rows.length === 0 && s.update.length === 0) continue
         const bagianBaru = []
-        rows.forEach(r => { if (r.bagian && !bagianBaru.includes(r.bagian)) bagianBaru.push(r.bagian) })
+        ;[...rows, ...s.update].forEach(r => { if (r.bagian && !bagianBaru.includes(r.bagian)) bagianBaru.push(r.bagian) })
+        if (rows.length === 0) continue
         let targetId = paketId
         let dibuatBaru = false
         if (mode === 'root') {
@@ -275,6 +359,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           paket_id: targetId, jp: r.jp, arti: r.arti, bagian: r.bagian || '',
           contoh_kalimat: r.contoh_kalimat, bunshuu: r.bunshuu,
           konteks: r.konteks, nuansa: r.nuansa, kata_baru: r.kata_baru, urutan: t0 + i,
+          ...(r.hafal !== undefined ? { hafal: r.hafal } : {}),
         }))
         for (let i = 0; i < payloadKata.length; i += 200) {
           const { error } = await supabase.from('kata').insert(payloadKata.slice(i, i + 200))
@@ -286,7 +371,9 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         kataMasuk += rows.length
       }
       setPreview(null)
-      alert(mode === 'root' ? `Selesai! ${paketBaru} paket baru, ${kataMasuk} kata masuk.` : `Selesai! ${kataMasuk} kata masuk.`)
+      const bagianUpdate = kataUpdate > 0 ? `${kataUpdate} kata di-update` : ''
+      const bagianBaru = mode === 'root' ? `${paketBaru} paket baru, ${kataMasuk} kata masuk` : `${kataMasuk} kata masuk`
+      alert(`Selesai! ${[bagianBaru, bagianUpdate].filter(Boolean).join(', ')}.`)
     } catch (err) {
       alert(err.message)
     }
@@ -297,21 +384,26 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
   // ---------- tampilan ----------
   const totalMasuk = preview ? preview.sheets.reduce((n, s) => n + hitungMasuk(s), 0) : 0
   const totalWarn = preview ? preview.sheets.reduce((n, s) => n + s.warn.length, 0) : 0
+  const totalUpdate = preview ? preview.sheets.reduce((n, s) => n + s.update.length, 0) : 0
   const kecil = { fontSize: 11, color: '#7a8a80', lineHeight: 1.6 }
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block', ...style }}>
-      <button className={tombolKecil ? 'act-btn' : 'icon-btn'} title="Import dari Excel" disabled={busy} onClick={() => setMenu(m => !m)}
+      <button className={tombolKecil ? 'act-btn' : 'icon-btn'} title="Excel: import, export, atau download template" disabled={busy} onClick={() => setMenu(m => !m)}
         style={tombolKecil ? { fontWeight: 700 } : { width: 34, height: 34, fontSize: 13, fontWeight: 700 }}>
         {busy && !preview ? '⏳' : 'I'}
       </button>
       <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={pilihFile} style={{ display: 'none' }} />
       {menu && (
-        <div style={{ position: 'absolute', top: '110%', right: 0, background: '#fff', borderRadius: 10, boxShadow: '0 6px 18px rgba(0,0,0,.15)', border: '1px solid #e5e5e5', minWidth: 190, zIndex: 20, overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: '110%', right: 0, background: '#fff', borderRadius: 10, boxShadow: '0 6px 18px rgba(0,0,0,.15)', border: '1px solid #e5e5e5', minWidth: 230, zIndex: 20, overflow: 'hidden' }}>
           <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 13 }}
-            onClick={() => { setMenu(false); inputRef.current?.click() }}>📥 Pilih file Excel</button>
+            onClick={() => { setMenu(false); inputRef.current?.click() }}>📥 Pilih file Excel (import/update)</button>
+          {kataList !== null && (
+            <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderTop: '1px solid #f0f0f0', background: '#fff', cursor: 'pointer', fontSize: 13 }}
+              onClick={exportSemuaKata}>📤 Export semua kata ({kataList.length})</button>
+          )}
           <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderTop: '1px solid #f0f0f0', background: '#fff', cursor: 'pointer', fontSize: 13 }}
-            onClick={downloadTemplate}>📄 Download template</button>
+            onClick={downloadTemplate}>📄 Download template kosong</button>
         </div>
       )}
 
@@ -333,7 +425,8 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
                 {!s.error && !s.kosong && (
                   <>
                     <div style={{ fontSize: 12 }}>
-                      ✅ {hitungMasuk(s)} masuk
+                      {s.update.length > 0 && `🔄 ${s.update.length} di-update · `}
+                      ✅ {s.ok.length + (paksa ? s.warn.length : 0)} baru masuk
                       {s.blok.length + s.dobel.length + (paksa ? 0 : s.warn.length) > 0 && ` · ⏭ ${s.blok.length + s.dobel.length + (paksa ? 0 : s.warn.length)} dilewati`}
                       {s.lengkap.length > 0 && ` · ❗ ${s.lengkap.length} baris nggak lengkap`}
                     </div>
@@ -365,7 +458,9 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
             <div className="modal-btns" style={{ marginTop: 12 }}>
               <button disabled={busy} onClick={() => setPreview(null)}>Batal</button>
               <button className="confirm" disabled={busy || totalMasuk === 0} onClick={jalankan}>
-                {busy ? 'Mengimpor...' : `Import ${totalMasuk} kata`}
+                {busy ? 'Memproses...' : totalUpdate > 0
+                  ? `Proses (${totalUpdate} update, ${totalMasuk - totalUpdate} baru)`
+                  : `Import ${totalMasuk} kata`}
               </button>
             </div>
           </div>
