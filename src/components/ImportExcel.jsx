@@ -391,7 +391,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
     <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block', ...style }}>
       <button className={tombolKecil ? 'act-btn' : 'icon-btn'} title="Excel: import, export, atau download template" disabled={busy} onClick={() => setMenu(m => !m)}
         style={tombolKecil ? { fontWeight: 700 } : { width: 34, height: 34, fontSize: 13, fontWeight: 700 }}>
-        {busy && !preview ? '⏳' : 'I'}
+        {busy && !preview ? '⏳' : '🔃'}
       </button>
       <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={pilihFile} style={{ display: 'none' }} />
       {menu && (
