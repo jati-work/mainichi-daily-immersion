@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { loadXLSX, loadExcelJS } from '../lib/excelLoaders'
 
 // ---------- konfigurasi kolom per sisi ----------
 // kiri = Buku (kata + bunshuu), kanan = Harian (kalimat + konteks + nuansa)
@@ -34,34 +35,6 @@ function normJP(s) {
 }
 const kunciHeader = h => String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
 const pecahTag = s => String(s || '').split(',').map(w => w.trim()).filter(Boolean)
-
-// ---------- load SheetJS dari cdnjs (sama pola kayak jsPDF di PaketList) ----------
-// dipakai buat BACA file .xlsx pas import
-async function loadXLSX() {
-  if (window.XLSX) return window.XLSX
-  await new Promise((resolve, reject) => {
-    const s = document.createElement('script')
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
-    s.onload = resolve
-    s.onerror = () => reject(new Error('Gagal load library Excel (cek koneksi internet)'))
-    document.body.appendChild(s)
-  })
-  return window.XLSX
-}
-
-// dipakai khusus buat BIKIN template -- SheetJS versi gratis nggak bisa nulis
-// warna sel, jadi buat header yang di-stabilo biru pakai ExcelJS
-async function loadExcelJS() {
-  if (window.ExcelJS) return window.ExcelJS
-  await new Promise((resolve, reject) => {
-    const s = document.createElement('script')
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'
-    s.onload = resolve
-    s.onerror = () => reject(new Error('Gagal load library Excel (cek koneksi internet)'))
-    document.body.appendChild(s)
-  })
-  return window.ExcelJS
-}
 
 // ambil SEMUA kata (Supabase default cuma ngembaliin 1000 baris per request)
 async function ambilSemuaKata() {
