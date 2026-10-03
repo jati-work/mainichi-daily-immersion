@@ -299,7 +299,9 @@ export default function TebakRadikal({ goTo, openPaket }) {
         <button className={`act-btn ${showForm && !editingId ? 'active' : ''}`} onClick={toggleForm}>{editingId ? '✏️ Edit Radikal' : '＋ Radikal'}</button>
         <button className={`act-btn ${editMode ? 'active' : ''}`} onClick={toggleEditMode}>✏️ Edit</button>
         <button className={`act-btn ${hapusMode ? 'active' : ''}`} onClick={toggleHapusMode}>🗑️ Hapus</button>
-        <ImportExcelRadikal radikalList={radikalList} onDone={muatData} />
+        <div style={{ marginLeft: 'auto' }}>
+          <ImportExcelRadikal radikalList={radikalList} onDone={muatData} />
+        </div>
       </div>
 
       {showForm && (
