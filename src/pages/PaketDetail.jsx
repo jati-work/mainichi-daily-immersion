@@ -153,6 +153,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [arti, setArti] = useState('')
   const [contohKalimat, setContohKalimat] = useState('')
   const [bunshuu, setBunshuu] = useState('')
+  const [plesetan, setPlesetan] = useState('')
   const [konteks, setKonteks] = useState('')
   const [nuansa, setNuansa] = useState('')
   const [kataBaruInput, setKataBaruInput] = useState('')
@@ -162,6 +163,8 @@ export default function PaketDetail({ paketId, goTo }) {
   const [editingId, setEditingId] = useState(null)
   const [sisiPaket, setSisiPaket] = useState('kiri') // 'kiri' = buku (kata+bunshuu), 'kanan' = harian (kalimat+konteks+nuansa)
   const jpInputRef = useRef(null)
+  const kanjiTesRef = useRef(null)
+  const artiTesRef = useRef(null)
   const bagianScrollRef = useRef(null)
   const [scrollState, setScrollState] = useState({ canLeft: false, canRight: false })
   const [showPdf, setShowPdf] = useState(false)
@@ -347,6 +350,7 @@ export default function PaketDetail({ paketId, goTo }) {
         jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
         konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: kataBaruInput.trim(),
+        ...(sisiPaket === 'kiri' ? { plesetan: plesetan.trim() } : {}),
       }).eq('id', editingId)
       if (error) { alert('Gagal update: ' + error.message); return }
     } else {
@@ -354,6 +358,7 @@ export default function PaketDetail({ paketId, goTo }) {
         paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
         konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: kataBaruInput.trim(), urutan: Date.now(),
+        ...(sisiPaket === 'kiri' ? { plesetan: plesetan.trim() } : {}),
       })
       if (error) { alert('Gagal simpan: ' + error.message); return }
     }
@@ -398,13 +403,13 @@ export default function PaketDetail({ paketId, goTo }) {
   // reset isian kata doang, form-nya TETEP kebuka & bagian yang lagi
   // dipilih TETEP kesimpen (beda sama batalForm yang nutup form total)
   function resetFieldsKataSaja() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setKonteks(''); setNuansa(''); setKataBaruInput('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput('')
     setEditingId(null)
     setTimeout(() => jpInputRef.current?.focus(), 0)
   }
 
   function batalForm() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setBagianInput('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setBagianInput('')
     setEditingId(null)
     setShowForm(false)
   }
@@ -461,6 +466,7 @@ export default function PaketDetail({ paketId, goTo }) {
     setArti(k.arti)
     setContohKalimat(k.contoh_kalimat || '')
     setBunshuu(k.bunshuu || '')
+    setPlesetan(k.plesetan || '')
     setKonteks(k.konteks || '')
     setNuansa(k.nuansa || '')
     setKataBaruInput(k.kata_baru || '')
@@ -706,16 +712,33 @@ async function hapusPdf() {
         if (dir === 'bunshuu-kanji') return !!k.bunshuu
         if (dir === 'natural-dasar') return !!k.contoh_kalimat
         if (dir === 'dasar-bunshuu') return !!k.bunshuu
+        if (dir === 'plesetan-kanji-arti') return !!k.plesetan
         return true
       })
     if (sumber.length === 0) { alert('Tidak ada kata yang sesuai untuk mode tes ini!'); return }
     tutupPanelLain()
     const words = shuffle(sumber)
-    setTes({ dir, words, idx: 0, correct: 0, wrong: 0, benarIds: [], answered: false, input: '', salah: false })
+    setTes({ dir, words, idx: 0, correct: 0, wrong: 0, benarIds: [], answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false, salahKanjiCount: 0, salahArtiCount: 0 })
   }
   function tesCek() {
     if (!tes || tes.answered) return
     const w = tes.words[tes.idx]
+    if (tes.dir === 'plesetan-kanji-arti') {
+      const v1 = tes.input.trim()
+      const v2 = (tes.input2 || '').trim()
+      if (!v1 && !v2) return
+      const kanjiBenar = v1 !== '' && normalisasiJP(v1) === normalisasiJP(w.jp)
+      const artiBenar = v2 !== '' && w.arti.split(/[/;]/).map(normalisasiID).some(p => p === normalisasiID(v2))
+      const semuaBenar = kanjiBenar && artiBenar
+      setTes(t => ({
+        ...t, answered: true, salah: !semuaBenar, salahKanji: !kanjiBenar, salahArti: !artiBenar,
+        correct: t.correct + (semuaBenar ? 1 : 0), wrong: t.wrong + (semuaBenar ? 0 : 1),
+        salahKanjiCount: t.salahKanjiCount + (kanjiBenar ? 0 : 1),
+        salahArtiCount: t.salahArtiCount + (artiBenar ? 0 : 1),
+        benarIds: semuaBenar ? [...t.benarIds, w.id] : t.benarIds,
+      }))
+      return
+    }
     const val = tes.input.trim()
     if (!val) return
     let benar = false
@@ -746,7 +769,8 @@ async function hapusPdf() {
       }
       setTes(t => ({ ...t, idx: t.idx + 1 }))
     } else {
-      setTes(t => ({ ...t, idx: t.idx + 1, answered: false, input: '', salah: false }))
+      setTes(t => ({ ...t, idx: t.idx + 1, answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false }))
+      setTimeout(() => kanjiTesRef.current?.focus(), 0)
     }
   }
   function tutupTes() { setTes(null); setShowRadikalTes(false) }
@@ -838,6 +862,8 @@ async function hapusPdf() {
                 </>
               ) : (
                 <>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('plesetan-kanji-arti'); setShowTesBawah(false) }}>Plesetan → Kanji + Arti</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
                   <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kanji Dasar</button>
                   <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
                   <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('bunshuu-kanji'); setShowTesBawah(false) }}>Bunshuu → Kanji Dasar</button>
@@ -925,6 +951,9 @@ async function hapusPdf() {
                 <input tabIndex={4} placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && simpanKata()}
                   style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+                <input tabIndex={5} placeholder="Plesetan Indo (opsional), misal: koro bu → kacang koro bu" value={plesetan} onChange={e => setPlesetan(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', gridColumn: '1 / -1' }} />
               </>
             )}
             <div style={{ gridColumn: '1 / -1' }}>
@@ -1059,6 +1088,44 @@ async function hapusPdf() {
             {!selesai ? (
               <>
                 <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{tes.idx + 1} / {tes.words.length} · ✓ {tes.correct} · ✗ {tes.wrong}</div>
+                {tes.dir === 'plesetan-kanji-arti' && (
+                  <>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>Tulis Kanji & Artinya:</div>
+                    <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 14, textAlign: 'center' }}>{tes.words[tes.idx].plesetan}</div>
+                    <input
+                      ref={kanjiTesRef} autoFocus placeholder="Kanji / kana" value={tes.input} readOnly={tes.answered}
+                      onChange={e => setTes(t => ({ ...t, input: e.target.value }))}
+                      onKeyDown={e => { if (e.key === 'Enter') { if (tes.answered) tesLanjut(); else artiTesRef.current?.focus() } }}
+                      style={{
+                        textAlign: 'center', fontSize: 18, fontFamily: "'Noto Serif JP', serif", width: '100%', boxSizing: 'border-box', marginBottom: 6,
+                        borderColor: tes.answered ? (tes.salahKanji ? '#c0392b' : '#1e7d4f') : undefined,
+                      }}
+                    />
+                    <input
+                      ref={artiTesRef} placeholder="Artinya" value={tes.input2 || ''} readOnly={tes.answered}
+                      onChange={e => setTes(t => ({ ...t, input2: e.target.value }))}
+                      onKeyDown={e => e.key === 'Enter' && (tes.answered ? tesLanjut() : tesCek())}
+                      style={{
+                        textAlign: 'center', fontSize: 18, width: '100%', boxSizing: 'border-box',
+                        borderColor: tes.answered ? (tes.salahArti ? '#c0392b' : '#1e7d4f') : undefined,
+                      }}
+                    />
+                    {tes.answered && (
+                      <div style={{ textAlign: 'center', fontSize: 12, margin: '8px 0', lineHeight: 1.7 }}>
+                        <div style={{ color: tes.salahKanji ? '#c0392b' : '#1e7d4f', fontWeight: 600 }}>
+                          {tes.salahKanji ? '✗ Salah kanji' : '✓ Kanji benar'}
+                          {tes.salahKanji && <span style={{ color: '#888', fontWeight: 400 }}> — jawaban: <b style={{ fontFamily: "'Noto Serif JP', serif" }}>{tes.words[tes.idx].jp}</b></span>}
+                        </div>
+                        <div style={{ color: tes.salahArti ? '#c0392b' : '#1e7d4f', fontWeight: 600 }}>
+                          {tes.salahArti ? '✗ Salah arti' : '✓ Arti benar'}
+                          {tes.salahArti && <span style={{ color: '#888', fontWeight: 400 }}> — jawaban: <b>{tes.words[tes.idx].arti}</b></span>}
+                        </div>
+                        {!tes.salah && <div style={{ color: '#1e7d4f' }}>Inget! 🎉</div>}
+                      </div>
+                    )}
+                  </>
+                )}
+                {tes.dir !== 'plesetan-kanji-arti' && (<>
                 <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>
                   {sisiPaket === 'kanan'
                     ? { 'arti-dasar': 'Tulis Kalimatnya:', 'dasar-arti': 'Tulis Artinya:' }[tes.dir]
@@ -1086,6 +1153,7 @@ async function hapusPdf() {
                     </b>
                   </div>
                 )}
+                </>)}
                 <div className="modal-btns">
                   <button onClick={tutupTes}>Tutup</button>
                   <button className="confirm" onClick={tes.answered ? tesLanjut : tesCek}>
@@ -1100,6 +1168,11 @@ async function hapusPdf() {
                 <div style={{ fontSize: 12, color: '#9abaa8', textAlign: 'center', marginBottom: 14 }}>
                   {tes.benarIds.length > 0 ? `${tes.benarIds.length} kata otomatis diceklis hafal ✓` : 'Belum ada yang benar, coba lagi!'}
                 </div>
+                {tes.dir === 'plesetan-kanji-arti' && tes.wrong > 0 && (
+                  <div style={{ fontSize: 12, color: '#888', textAlign: 'center', marginBottom: 14 }}>
+                    Salah kanji: <b>{tes.salahKanjiCount}</b> · Salah arti: <b>{tes.salahArtiCount}</b>
+                  </div>
+                )}
                 <div className="modal-btns">
                   <button onClick={tutupTes}>Selesai</button>
                   <button className="confirm" onClick={() => startTes(tes.dir)}>Ulangi</button>
