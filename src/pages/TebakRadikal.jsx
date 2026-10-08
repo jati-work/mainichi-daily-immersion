@@ -70,6 +70,8 @@ export default function TebakRadikal({ goTo, openPaket }) {
   const [showTesMenu, setShowTesMenu] = useState(false)
   const [tes, setTes] = useState(null)
   const [showPickerTes, setShowPickerTes] = useState(false)
+  const [showPickerHalaman, setShowPickerHalaman] = useState(false)
+  const [targetPicker, setTargetPicker] = useState('cari') // 'cari' = kolom pencarian, 'karakter' = kolom Karakter di form
 
   async function muatData() {
     setLoading(true)
@@ -99,7 +101,7 @@ export default function TebakRadikal({ goTo, openPaket }) {
   useEffect(() => {
     function handleClickOutside(e) {
       if (!e.target.closest('[data-dropdown]')) setShowTesMenu(false)
-      if (!e.target.closest('[data-form-area]') && !e.target.closest('.card') && !e.target.closest('.modal-overlay')) {
+      if (!e.target.closest('[data-form-area]') && !e.target.closest('.card') && !e.target.closest('.modal-overlay') && !e.target.closest('[data-radical-picker]')) {
         batalForm()
         setEditMode(false)
         setHapusMode(false)
@@ -321,6 +323,7 @@ export default function TebakRadikal({ goTo, openPaket }) {
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <input placeholder="Karakter" value={karakterInput} onChange={e => setKarakterInput(e.target.value)}
+              onFocus={() => setTargetPicker('karakter')}
               onKeyDown={e => e.key === 'Enter' && simpanRadikal()}
               style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
             <input placeholder="Arti" value={artiInput} onChange={e => setArtiInput(e.target.value)}
@@ -341,6 +344,7 @@ export default function TebakRadikal({ goTo, openPaket }) {
       <div style={{ padding: '10px 12px 0' }}>
         <input
           className="input-search"
+          onFocus={() => setTargetPicker('cari')}
           placeholder="🔍 Cari radikal ini di kotoba (cek bunshuu-nya)..."
           value={cariKotoba}
           onChange={e => setCariKotoba(e.target.value)}
@@ -500,6 +504,21 @@ export default function TebakRadikal({ goTo, openPaket }) {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {!tes && (
+        <div data-radical-picker>
+          <RadicalPicker
+            variant="panel"
+            open={showPickerHalaman}
+            onToggle={() => setShowPickerHalaman(o => !o)}
+            onClose={() => setShowPickerHalaman(false)}
+            onPilih={(k) => {
+              if (showForm && targetPicker === 'karakter') setKarakterInput(v => v + k)
+              else setCariKotoba(v => v + k)
+            }}
+          />
         </div>
       )}
     </div>
