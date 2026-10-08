@@ -10,6 +10,7 @@ const KOLOM = {
     { field: 'arti', judul: 'Arti', wajib: true, alias: ['arti', 'artiid', 'artiindonesia', 'meaning', 'terjemahan'] },
     { field: 'contoh_kalimat', judul: 'Contoh Kalimat', alias: ['contohkalimat', 'contoh', 'kalimatcontoh'] },
     { field: 'bunshuu', judul: 'Bunshuu', alias: ['bunshuu', 'bushuu', 'bunshu', 'bushu', 'radikal', 'radical'] },
+    { field: 'plesetan', judul: 'Plesetan Indo', alias: ['plesetan', 'plesetanindo', 'plesetanindonesia'] },
     { field: 'bagian', judul: 'Bagian', alias: ['bagian'] },
   ],
   kanan: [
@@ -21,7 +22,7 @@ const KOLOM = {
     { field: 'bagian', judul: 'Bagian', alias: ['bagian'] },
   ],
 }
-const SEMUA_FIELD = ['jp', 'arti', 'bagian', 'contoh_kalimat', 'bunshuu', 'konteks', 'nuansa', 'kata_baru']
+const SEMUA_FIELD = ['jp', 'arti', 'bagian', 'contoh_kalimat', 'bunshuu', 'plesetan', 'konteks', 'nuansa', 'kata_baru']
 // id & hafal dibaca TERPISAH dari SEMUA_FIELD -- cuma relevan buat file hasil
 // "Export semua kata" yang nanti di-upload ulang buat UPDATE, bukan buat
 // template kosong (makanya nggak ikut nongol di KOLOM/template).
@@ -163,6 +164,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           ? 'Satu sheet = satu paket baru. Nama sheet jadi nama paket (maks. 31 karakter). Tambah sheet buat paket lain.'
           : 'Cuma sheet pertama (selain sheet Petunjuk ini) yang dibaca.',
         sisi === 'kanan' ? 'Kata Baru: pisahkan pakai koma, contoh: 勉強, 宿題' : '',
+        sisi === 'kiri' ? 'Plesetan Indo: plesetan bunyi kata dalam bahasa Indonesia (jembatan keledai), contoh: koro bu → kacang koro bu. Dipakai di mode tes "Plesetan → Kanji + Arti".' : '',
         'Bagian: nama bagian (contoh: Episode 1). Bagian yang belum ada dibuat otomatis.',
         'Kata/kalimat yang sudah ada di paket lain akan dilewati (bisa dipaksa masuk lewat pratinjau).',
         'Jangan ubah nama kolom di baris pertama. Sheet bernama "Petunjuk" nggak ikut diimpor.',
@@ -297,6 +299,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
               jp: u.jp, arti: u.arti, bagian: u.bagian || '',
               contoh_kalimat: u.contoh_kalimat, bunshuu: u.bunshuu,
               konteks: u.konteks, nuansa: u.nuansa, kata_baru: u.kata_baru,
+              ...(sisi === 'kiri' ? { plesetan: u.plesetan } : {}),
             }
             if (u.hafal !== undefined) payloadUpdate.hafal = u.hafal
             const { error } = await supabase.from('kata').update(payloadUpdate).eq('id', u.id)
@@ -332,6 +335,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           paket_id: targetId, jp: r.jp, arti: r.arti, bagian: r.bagian || '',
           contoh_kalimat: r.contoh_kalimat, bunshuu: r.bunshuu,
           konteks: r.konteks, nuansa: r.nuansa, kata_baru: r.kata_baru, urutan: t0 + i,
+          ...(sisi === 'kiri' ? { plesetan: r.plesetan } : {}),
           ...(r.hafal !== undefined ? { hafal: r.hafal } : {}),
         }))
         for (let i = 0; i < payloadKata.length; i += 200) {
