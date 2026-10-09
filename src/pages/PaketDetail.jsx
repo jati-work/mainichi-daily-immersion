@@ -5,8 +5,23 @@ import DiaryHalaman from './DiaryHalaman'
 import RadicalPicker from './RadicalPicker'
 import ImportExcel from '../components/ImportExcel'
 
+// Romaji bantuan di belakang kalimat, contoh: 首に拭きます。 (kubi ni fukimasu)
+// Cuma kurung di AKHIR yang isinya huruf latin (dan ada huruf kecil) yang dianggap romaji,
+// jadi "(PT)" atau kurung berisi kanji nggak ikut terbuang.
+const ROMAJI_AKHIR = /\s*[（(](?=[^)）]*[a-zāīūēō])[A-Za-z\u00C0-\u024F\s.,'’\-!?]+[)）]\s*$/
+function pisahRomaji(s) {
+  const str = String(s ?? '')
+  const m = str.match(ROMAJI_AKHIR)
+  if (!m) return { utama: str, romaji: '' }
+  return {
+    utama: str.slice(0, m.index).trimEnd(),
+    romaji: m[0].replace(/^\s*[（(]\s*/, '').replace(/\s*[)）]\s*$/, ''),
+  }
+}
+function jpMurni(s) { return pisahRomaji(s).utama }
+
 function normalisasiJP(s) {
-  return String(s).trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
+  return jpMurni(s).trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
 }
 function normalisasiID(s) {
   return String(s).trim().toLowerCase().replace(/[、。！？\s]/g, '')
@@ -30,6 +45,7 @@ function Kartu({
   k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
+  const { utama: jpUtama, romaji: jpRomaji } = pisahRomaji(k.jp)
   return (
     <div
       className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
@@ -54,7 +70,10 @@ function Kartu({
         }}
       >
         <div className="card-front">
-          <div>{k.jp}</div>
+          <div>
+            {jpUtama}
+            {jpRomaji && <div style={{ fontSize: 12, marginTop: 4, color: '#7a9a86' }}>({jpRomaji})</div>}
+          </div>
         </div>
         <div className="card-back">
           <div>{k.arti}</div>
@@ -83,9 +102,15 @@ function BadgeKataBaru({ k }) {
 
 // blok "JP" = kalimat Jepang + badge kata_baru yang ditag di kalimat itu
 function BlokJp({ k }) {
+  const { utama, romaji } = pisahRomaji(k.jp)
   return (
     <div className="baris-kalimat-blok">
-      <div className="baris-kalimat-jp">{k.jp}</div>
+      <div className="baris-kalimat-jp">
+        {utama}
+        {romaji && (
+          <span style={{ fontSize: '0.62em', color: '#7a9a86', marginLeft: 10, fontFamily: 'inherit' }}>({romaji})</span>
+        )}
+      </div>
       <BadgeKataBaru k={k} />
     </div>
   )
@@ -717,7 +742,7 @@ async function hapusPdf() {
       })
     if (sumber.length === 0) { alert('Tidak ada kata yang sesuai untuk mode tes ini!'); return }
     tutupPanelLain()
-    const words = shuffle(sumber)
+    const words = shuffle(sumber).map(k => ({ ...k, jp: jpMurni(k.jp) })) // tes TANPA romaji
     setTes({ dir, words, idx: 0, correct: 0, wrong: 0, benarIds: [], answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false, salahKanjiCount: 0, salahArtiCount: 0 })
   }
   function tesCek() {
