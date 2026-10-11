@@ -907,7 +907,7 @@ async function hapusPdf() {
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
         <button className={`act-btn ${adaIsiDiary ? 'active' : ''}`} onClick={bukaDiary} title="Buku Diary">📔</button>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
-        <ImportExcel mode="paket" sisi={sisiPaket} paketId={paketId} bagianList={bagianList} kataList={kataList} namaPaket={paket.nama} onDone={muatSemua} kecil />
+        <ImportExcel mode="paket" sisi={sisiPaket} paketId={paketId} bagianList={bagianList} kataList={kataList} namaPaket={paket.nama} bagianAktif={filterBagian !== 'all' ? filterBagian : ''} onDone={muatSemua} kecil />
         <div style={{ position: 'relative' }} data-dropdown>
           <button className="act-btn" onClick={() => setShowMenu(m => !m)} title="Menu lainnya">⋯</button>
           {showMenu && (
