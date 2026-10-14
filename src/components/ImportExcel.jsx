@@ -39,19 +39,6 @@ function normJP(s) {
 const kunciHeader = h => String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
 const pecahTag = s => String(s || '').split(',').map(w => w.trim()).filter(Boolean)
 
-// ambil SEMUA kata (Supabase default cuma ngembaliin 1000 baris per request)
-async function ambilSemuaKata() {
-  const semua = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase
-      .from('kata').select('id, jp, kata_baru, paket_id, paket:paket_id (nama, tanggal)').range(from, from + 999)
-    if (error) throw error
-    semua.push(...(data || []))
-    if (!data || data.length < 1000) break
-  }
-  return semua
-}
-
 // ---------- baca 1 sheet -> baris terstruktur ----------
 function bacaSheet(XLSX, ws, sisi) {
   const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
@@ -79,63 +66,16 @@ function bacaSheet(XLSX, ws, sisi) {
   return { baris }
 }
 
-// ---------- cocokkan baris file ke kata yang SUDAH ADA di paket ini ----------
-// cuma kolom yang terisi di file DAN beda dari isi sekarang yang dihitung;
-// sel kosong di file nggak pernah menimpa isi yang udah ada. jp = kunci pencocokan (nggak berubah), urutan nggak pernah disentuh.
-function hitungPerubahan(b, k, sisi) {
-  const p = {}
-  KOLOM[sisi].forEach(c => {
-    if (c.field === 'jp') return
-    const baru = String(b[c.field] ?? '').trim()
-    if (!baru) return
-    if (baru !== String(k[c.field] ?? '').trim()) p[c.field] = baru
-  })
-  return p
-}
-
-// ---------- klasifikasi: ok / lengkap-tidak / dobel / sudah ada ----------
-// aturan sama kayak input manual di PaketDetail:
-//  - Harian: kalimat persis sama = diblok total; kata_baru yang udah ada = peringatan (boleh dipaksa)
-//  - Buku: kata yang udah ada = peringatan (boleh dipaksa)
-function klasifikasi(baris, sisi, dbKata, sudahDiFile, idSaatIni, kataPaket = null) {
-  const dbJp = new Map()   // normJP(jp) -> [info]
-  const dbTag = new Map()  // normJP(tag kata_baru) -> [info]
-  const tambah = (m, k, info) => { if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(info) }
-  dbKata.forEach(r => {
-    const info = { nama: r.paket?.nama, tanggal: r.paket?.tanggal }
-    tambah(dbJp, normJP(r.jp), info)
-    pecahTag(r.kata_baru).forEach(t => tambah(dbTag, normJP(t), info))
-  })
+// ---------- klasifikasi: cuma 2 golongan ----------
+// lengkap = Kata/Kalimat JP dan Arti terisi -> masuk (SEMUA masuk sebagai kata baru,
+//           urut sesuai baris di file, tanpa cek duplikat dan tanpa kolom ID)
+// kurang  = salah satu kosong -> ditolak dan ditunjukin barisnya
+// field lain (blok, warn, update, dst) sengaja dibiarin kosong biar tampilan pratinjau tetap jalan
+function klasifikasi(baris) {
   const hasil = { ok: [], lengkap: [], dobel: [], blok: [], warn: [], update: [], cocok: [], sama: [], ambigu: [] }
   baris.forEach(b => {
-    if (!b.jp || !b.arti) { hasil.lengkap.push(b); return }
-    // kalau kolom ID-nya cocok sama kata yang emang udah ada di paket ini,
-    // ini mode UPDATE -- langsung dianggap sah, skip semua cek duplikat
-    // (karena dia MEMANG baris kata itu sendiri, cuma lagi diedit).
-    if (b.id && idSaatIni && idSaatIni.has(b.id)) { hasil.update.push(b); return }
-    const kunci = normJP(b.jp)
-    if (sudahDiFile.has(kunci)) { hasil.dobel.push(b); return }
-    sudahDiFile.add(kunci)
-    // kata yang udah ada di PAKET INI -> mode update (cuma kolom terisi yang beda)
-    if (kataPaket) {
-      const ada = kataPaket.get(kunci) || []
-      if (ada.length === 1) {
-        const perubahan = hitungPerubahan(b, ada[0], sisi)
-        if (Object.keys(perubahan).length > 0) hasil.cocok.push({ ...b, kataId: ada[0].id, perubahan })
-        else hasil.sama.push(b)
-        return
-      }
-      if (ada.length > 1) { hasil.ambigu.push(b); return }
-    }
-    if (sisi === 'kanan') {
-      if (dbJp.has(kunci)) { hasil.blok.push({ ...b, di: dbJp.get(kunci) }); return }
-      const cocok = pecahTag(b.kata_baru).flatMap(t => [...(dbJp.get(normJP(t)) || []), ...(dbTag.get(normJP(t)) || [])])
-      if (cocok.length) { hasil.warn.push({ ...b, di: cocok }); return }
-    } else {
-      const cocok = [...(dbJp.get(kunci) || []), ...(dbTag.get(kunci) || [])]
-      if (cocok.length) { hasil.warn.push({ ...b, di: cocok }); return }
-    }
-    hasil.ok.push(b)
+    if (!b.jp || !b.arti) hasil.lengkap.push(b)
+    else hasil.ok.push(b)
   })
   return hasil
 }
@@ -196,8 +136,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         sisi === 'kanan' ? 'Kata Baru: pisahkan pakai koma, contoh: 勉強, 宿題' : '',
         sisi === 'kiri' ? 'Plesetan Indo: plesetan bunyi kata dalam bahasa Indonesia (jembatan keledai), contoh: koro bu → kacang koro bu. Dipakai di mode tes "Plesetan → Kanji + Arti".' : '',
         'Bagian: nama bagian (contoh: Episode 1). Bagian yang belum ada dibuat otomatis.',
-        'Kata/kalimat yang sudah ada di paket lain akan dilewati (bisa dipaksa masuk lewat pratinjau).',
-        mode === 'paket' ? 'Kata yang sudah ada di paket ini dicocokkan lewat Kata JP: kolom yang terisi dan beda akan di-update, sel kosong tidak menimpa isi yang ada.' : '',
+        'Semua baris yang lengkap masuk sebagai kata baru, urut sesuai baris di file. Nggak ada pengecekan duplikat.',
         'Jangan ubah nama kolom di baris pertama. Sheet bernama "Petunjuk" nggak ikut diimpor.',
       ].filter(Boolean)
       petunjuk.forEach(t => wsP.addRow([t]))
@@ -215,10 +154,9 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
     setBusy(false)
   }
 
-  // Export SEMUA kata di paket ini (hafal atau belum, nggak difilter) ke
-  // Excel, lengkap sama kolom ID & Hafal yang tersembunyi maksudnya -- biar
-  // kalau file ini diedit terus di-upload balik lewat "Pilih file Excel",
-  // baris yang ID-nya cocok otomatis di-UPDATE, bukan dianggap baru.
+  // Export kata di paket ini (hafal atau belum, nggak difilter) ke Excel.
+  // hanyaBagian = true -> cuma bagian yang lagi dibuka; false -> semua kata (menu
+  // ini cuma muncul di tab "Semua"). Nggak ada kolom ID: upload balik = kata baru.
   async function exportKata(hanyaBagian = false) {
     setMenu(false)
     const daftar = hanyaBagian ? (kataBagian || []) : (kataList || [])
@@ -230,16 +168,14 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
       const wb = new ExcelJS.Workbook()
       const ws = wb.addWorksheet('Kata')
       const semuaKolom = [
-        { judul: 'ID', wch: 10 },
         ...kolom.map(c => ({ judul: c.judul, wch: c.field === 'jp' || c.field === 'arti' ? 28 : 20 })),
         { judul: 'Hafal', wch: 10 },
       ]
       ws.columns = semuaKolom.map(c => ({ header: c.judul, width: c.wch }))
       ws.getRow(1).font = { bold: true, color: { argb: 'FF2D6A4A' } }
-      ws.getColumn(1).font = { color: { argb: 'FFB8C8B8' }, italic: true } // kolom ID diredupin, bukan buat diisi tangan
 
       ;[...daftar].sort((a, b) => (a.urutan ?? 0) - (b.urutan ?? 0)).forEach(k => {
-        const baris = [k.id, ...kolom.map(c => k[c.field] ?? ''), k.hafal ? 'Ya' : '']
+        const baris = [...kolom.map(c => k[c.field] ?? ''), k.hafal ? 'Ya' : '']
         ws.addRow(baris)
       })
 
@@ -252,11 +188,8 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           ? `Isi: kata di bagian "${bagianAktif}" pada paket "${namaPaket}" (hafal maupun belum), total ${daftar.length} kata.`
           : `Isi: SEMUA kata di paket "${namaPaket}" (hafal maupun belum), total ${daftar.length} kata.`,
         hanyaBagian ? 'Biar kata tetap di bagian ini, jangan ubah kolom Bagian. Baris baru yang kolom Bagian-nya dikosongin otomatis masuk ke bagian yang lagi dibuka pas kamu upload.' : '',
-        'Boleh diedit bebas buat ngebenerin typo, nambah/isi kolom opsional, dsb.',
-        'Kolom ID JANGAN diubah/dihapus -- itu yang bikin baris ini ke-detect sebagai kata YANG SAMA pas di-upload balik, jadi hasilnya UPDATE bukan nambah data baru/dobel.',
-        'Kalau mau nambah kata baru: tambah baris baru di bawah, kosongin aja kolom ID-nya.',
+        'File ini buat cadangan/dibaca. Kalau di-upload balik, semua barisnya masuk sebagai kata BARU (nggak ada fitur update lewat Excel).',
         'Kolom Hafal: isi "Ya" kalau udah hafal, kosongin kalau belum.',
-        'Upload balik file ini lewat tombol yang sama > "Pilih file Excel".',
       ].filter(t => t !== '').forEach(t => wsP.addRow([t]))
       wsP.getRow(1).font = { bold: true, size: 13, color: { argb: 'FF2D6A4A' } }
 
@@ -288,17 +221,9 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         catatan.push(`File punya ${namaSheet.length} sheet, cuma "${namaSheet[0]}" yang dipakai.`)
         namaSheet = namaSheet.slice(0, 1)
       }
-      const dbKata = await ambilSemuaKata()
-      const idSaatIni = mode === 'paket' ? new Set(dbKata.filter(r => r.paket_id === paketId).map(r => r.id)) : null
-      const sudahDiFile = new Set()
-      let kataPaket = null
-      if (mode === 'paket' && kataList) {
-        kataPaket = new Map()
-        kataList.forEach(k => { const key = normJP(k.jp); if (!key) return; if (!kataPaket.has(key)) kataPaket.set(key, []); kataPaket.get(key).push(k) })
-      }
       const sheets = namaSheet.map(nama => {
         const r = bacaSheet(XLSX, wb.Sheets[nama], sisi)
-        return { nama, error: r.error, kosong: r.kosong, ...(r.baris.length ? klasifikasi(r.baris, sisi, dbKata, sudahDiFile, idSaatIni, kataPaket) : { ok: [], lengkap: [], dobel: [], blok: [], warn: [], update: [], cocok: [], sama: [], ambigu: [] }) }
+        return { nama, error: r.error, kosong: r.kosong, ...(r.baris.length ? klasifikasi(r.baris) : { ok: [], lengkap: [], dobel: [], blok: [], warn: [], update: [], cocok: [], sama: [], ambigu: [] }) }
       })
       const pesanKurang = []
       sheets.forEach(s => {
@@ -435,12 +360,12 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
       {menu && (
         <div style={{ position: 'absolute', top: '110%', right: 0, background: '#fff', borderRadius: 10, boxShadow: '0 6px 18px rgba(0,0,0,.15)', border: '1px solid #e5e5e5', minWidth: 230, zIndex: 20, overflow: 'hidden' }}>
           <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 13 }}
-            onClick={() => { setMenu(false); inputRef.current?.click() }}>📥 Pilih file Excel (import/update)</button>
+            onClick={() => { setMenu(false); inputRef.current?.click() }}>📥 Pilih file Excel (import)</button>
           {kataList !== null && bagianAktif && (
             <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderTop: '1px solid #f0f0f0', background: '#fff', cursor: 'pointer', fontSize: 13 }}
               onClick={() => exportKata(true)}>📤 Export bagian ini ({kataBagian.length})</button>
           )}
-          {kataList !== null && (
+          {kataList !== null && !bagianAktif && (
             <button style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', borderTop: '1px solid #f0f0f0', background: '#fff', cursor: 'pointer', fontSize: 13 }}
               onClick={() => exportKata(false)}>📤 Export semua kata ({kataList.length})</button>
           )}
@@ -518,7 +443,6 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
                 <span>Tetep masukin {totalWarn} kata yang udah pernah dicatat di paket lain</span>
               </label>
             )}
-            {sisi === 'kanan' && <div style={kecil}>Kalimat yang persis sama dengan yang udah ada selalu dilewati, sama kayak input manual.</div>}
 
             <div className="modal-btns" style={{ marginTop: 12 }}>
               <button disabled={busy} onClick={() => setPreview(null)}>Batal</button>
