@@ -361,7 +361,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           if (gagal) throw new Error('Gagal update kata: ' + gagal.error.message)
           kataUpdate += hasilBatch.length
         }
-        const rows = [...s.ok, ...(paksa ? s.warn : [])].map(r => ({ ...r, bagian: r.bagian || (mode === 'paket' ? bagianAktif : '') }))
+        const rows = [...s.ok, ...(paksa ? s.warn : [])].sort((a, b) => (a._no ?? 0) - (b._no ?? 0)).map(r => ({ ...r, bagian: r.bagian || (mode === 'paket' ? bagianAktif : '') }))
         if (rows.length === 0 && s.update.length === 0) continue
         const bagianBaru = []
         ;[...rows, ...s.update].forEach(r => { if (r.bagian && !bagianBaru.includes(r.bagian)) bagianBaru.push(r.bagian) })
