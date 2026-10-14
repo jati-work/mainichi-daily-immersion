@@ -398,15 +398,11 @@ export default function PaketDetail({ paketId, goTo }) {
     if (!jp.trim() || !arti.trim()) { alert('Isi kata JP dan artinya dulu ya!'); return }
 
     if (sisiPaket === 'kanan') {
-      // 1. kalimat persis sama -> HARD BLOCK, gak ada opsi lanjut (nggak
-      // ada gunanya nyatet ulang kalimat yang sama persis). Ini cuma cek
-      // ke field jp -- kalimat kamu KEBETULAN sama kayak salah satu badge
-      // kata di kalimat lain itu BUKAN kasus ini, itu tanggung jawab
-      // pengecekan kata_baru di bawah.
-      const dupKalimat = await cekKalimatSama(jp.trim(), editingId)
-      if (dupKalimat) { setDup({ mode: 'blok', matches: [dupKalimat] }); return }
+      // kalimat yang sama persis SEKARANG BOLEH (misal sapaan/penutup yang
+      // muncul lagi di episode lain). Cuma kata di Kata Baru yang masih
+      // dikasih peringatan lunak di bawah.
 
-      // 2. kata di kata_baru -> SOFT WARNING, boleh di-override (kadang
+      // kata di kata_baru -> SOFT WARNING, boleh di-override (kadang
       // emang sengaja belajar bentuk/konteks baru dari kata yang sama)
       const kandidatKata = kataBaruInput.split(',').map(s => s.trim()).filter(Boolean)
       if (kandidatKata.length > 0) {
