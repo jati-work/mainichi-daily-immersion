@@ -23,6 +23,11 @@ function jpMurni(s) { return pisahRomaji(s).utama }
 function normalisasiJP(s) {
   return jpMurni(s).trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
 }
+// pemisah Kata Baru: koma Jepang (、) ATAU koma biasa (,) -- dua-duanya diterima.
+// Disimpan ke DB selalu dengan pemisah ", " biar tampilan & pencarian lama tetap jalan.
+function pecahKataBaru(s) {
+  return String(s || '').split(/[,，、､]/).map(t => t.trim()).filter(Boolean)
+}
 function normalisasiID(s) {
   return String(s).trim().toLowerCase().replace(/[、。！？\s]/g, '')
 }
@@ -89,7 +94,7 @@ function Kartu({
 // Lebih cocok buat kalimat/ekspresi yang lebih panjang.
 function BadgeKataBaru({ k }) {
   if (!k.kata_baru) return null
-  const words = k.kata_baru.split(',').map(w => w.trim()).filter(Boolean)
+  const words = pecahKataBaru(k.kata_baru)
   if (words.length === 0) return null
   return (
     <div className="badge-kata-baru-wrap">
@@ -354,7 +359,7 @@ export default function PaketDetail({ paketId, goTo }) {
         if (!sudahAda.has(key)) { sudahAda.add(key); hasil.push({ kata: row.jp, nama: row.paket?.nama, tanggal: row.paket?.tanggal }) }
       }
       if (row.kata_baru) {
-        const tagsRow = row.kata_baru.split(',').map(normalisasiJP).filter(Boolean)
+        const tagsRow = pecahKataBaru(row.kata_baru).map(normalisasiJP).filter(Boolean)
         tagsRow.forEach(t => {
           if (kandidat.includes(t)) {
             const key = `${t}|${row.paket?.nama}`
@@ -369,12 +374,12 @@ export default function PaketDetail({ paketId, goTo }) {
   // nulis ke DB doang, tanpa cek duplikat -- dipanggil dari simpanKata()
   // kalau lolos cek, ATAU dari tombol "Tetep Simpan" pas user override
   // warning kata (kalimat sama persis tetep TIDAK bisa di-override).
-  async function simpanKataAktual() {
+  async function simpanKataAktual(kataBaruOverride) {
     if (editingId) {
       const { error } = await supabase.from('kata').update({
         jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
-        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: kataBaruInput.trim(),
+        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: pecahKataBaru(kataBaruOverride ?? kataBaruInput).join(', '),
         ...(sisiPaket === 'kiri' ? { plesetan: plesetan.trim() } : {}),
       }).eq('id', editingId)
       if (error) { alert('Gagal update: ' + error.message); return }
@@ -382,7 +387,7 @@ export default function PaketDetail({ paketId, goTo }) {
       const { error } = await supabase.from('kata').insert({
         paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
-        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: kataBaruInput.trim(), urutan: Date.now(),
+        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: pecahKataBaru(kataBaruOverride ?? kataBaruInput).join(', '), urutan: Date.now(),
         ...(sisiPaket === 'kiri' ? { plesetan: plesetan.trim() } : {}),
       })
       if (error) { alert('Gagal simpan: ' + error.message); return }
@@ -392,6 +397,13 @@ export default function PaketDetail({ paketId, goTo }) {
     // buka form & pilih bagian dari awal lagi
     resetFieldsKataSaja()
     muatSemua()
+  }
+
+  // "Oke, Saya Ingat" di sisi Harian: kalimat tetap disimpan, tapi kata yang udah pernah
+  // dipelajari dibuang dari Kata Baru (kata lain di Kata Baru tetap ada)
+  function kataBaruTanpaDuplikat(d) {
+    const kunci = new Set((d?.matches || []).map(m => normalisasiJP(m.kata)))
+    return pecahKataBaru(kataBaruInput).filter(t => !kunci.has(normalisasiJP(t))).join(', ')
   }
 
   async function simpanKata() {
@@ -404,7 +416,7 @@ export default function PaketDetail({ paketId, goTo }) {
 
       // kata di kata_baru -> SOFT WARNING, boleh di-override (kadang
       // emang sengaja belajar bentuk/konteks baru dari kata yang sama)
-      const kandidatKata = kataBaruInput.split(',').map(s => s.trim()).filter(Boolean)
+      const kandidatKata = pecahKataBaru(kataBaruInput)
       if (kandidatKata.length > 0) {
         const dupKata = await cekDuplikatKata(kandidatKata, editingId)
         if (dupKata.length > 0) { setDup({ mode: 'warn', matches: dupKata }); return }
@@ -948,7 +960,7 @@ async function hapusPdf() {
                 <input tabIndex={2} placeholder="Arti" value={arti} onChange={e => setArti(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && simpanKata()}
                   style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', gridColumn: '1 / -1' }} />
-                <input tabIndex={3} placeholder="Kata baru yang dipelajari, pisah koma (opsional)" value={kataBaruInput} onChange={e => setKataBaruInput(e.target.value)}
+                <input tabIndex={3} placeholder="Kata baru yang dipelajari, pisah koma Jepang 、 (opsional)" value={kataBaruInput} onChange={e => setKataBaruInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && simpanKata()}
                   style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", gridColumn: '1 / -1' }} />
                 <input tabIndex={4} placeholder="Konteks / situasi (opsional)" value={konteks} onChange={e => setKonteks(e.target.value)}
@@ -1049,11 +1061,17 @@ async function hapusPdf() {
             )}
             <br /><br />
             {dup?.mode === 'warn'
-              ? 'Kan udah pernah dipelajarin semua bentuknya. Kalo emang sengaja mau catet konteks/nuansa baru dari kata ini, tetep boleh lanjut simpen. 🌱'
+              ? (sisiPaket === 'kanan'
+                ? 'Coba inget dulu artinya. "Oke, Saya Ingat" = kalimat tetap disimpan, tapi kata ini nggak dicatat lagi di Kata Baru. "Tetep Simpan" = kalimat dan katanya sama-sama disimpan. 🌱'
+                : 'Kan udah pernah dipelajarin semua bentuknya. Kalo emang sengaja mau catet konteks/nuansa baru dari kata ini, tetep boleh lanjut simpen. 🌱')
               : 'Ayo inget-inget! Ini active recall — coba diingat lagi artinya sebelum buka paket lamanya. 🌱'}
           </div>
           <div className="modal-btns">
-            <button className={dup?.mode === 'warn' ? '' : 'confirm'} onClick={() => setDup(null)}>Oke, Saya Ingat</button>
+            <button className={dup?.mode === 'warn' ? '' : 'confirm'} onClick={async () => {
+              const d = dup
+              setDup(null)
+              if (d?.mode === 'warn' && sisiPaket === 'kanan') await simpanKataAktual(kataBaruTanpaDuplikat(d))
+            }}>Oke, Saya Ingat</button>
             {dup?.mode === 'warn' && (
               <button className="confirm" onClick={async () => { setDup(null); await simpanKataAktual() }}>Tetep Simpan</button>
             )}
