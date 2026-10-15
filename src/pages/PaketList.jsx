@@ -98,24 +98,37 @@ export default function PaketList({ goTo, openPaket }) {
     if (!term) { setKamusHasil([]); setKamusLoading(false); return }
     setKamusLoading(true)
     const timer = setTimeout(async () => {
+      // limit dilonggarin (200) karena kalimat Harian ikut ketarik query tapi nanti dibuang di bawah
       const { data, error } = await supabase
         .from('kata')
-        .select('id, jp, arti, kata_baru, paket:paket_id (id, nama)')
+        .select('id, jp, arti, kata_baru, paket:paket_id (id, nama, folder_id, kolom)')
         .or(`jp.ilike.%${term}%,arti.ilike.%${term}%,kata_baru.ilike.%${term}%`)
-        .limit(50)
+        .limit(200)
       if (!error) {
         const termLower = term.toLowerCase()
         const hasil = []
+        const kataHarian = new Map() // kata yang sama di paket yang sama cukup tampil sekali
         ;(data || []).forEach(row => {
-          const cocokNormal = row.jp?.toLowerCase().includes(termLower) || row.arti?.toLowerCase().includes(termLower)
-          if (cocokNormal) hasil.push({ id: row.id, tipe: 'normal', jp: row.jp, arti: row.arti, paket: row.paket })
-          if (row.kata_baru) {
+          const sisi = row.paket ? sisiItem({ tipe: 'paket', data: row.paket }) : 'kiri'
+          if (sisi === 'kanan') {
+            // HARIAN: yang dicari & ditampilin KATA-nya aja (kalimat nggak ikut muncul)
             parseKataBaru(row.kata_baru)
               .filter(w => w.kata.toLowerCase().includes(termLower) || w.arti.toLowerCase().includes(termLower))
-              .forEach(w => hasil.push({ id: `${row.id}-${w.kata}`, tipe: 'badge', kataBadge: w.kata, artiBadge: w.arti, jp: row.jp, arti: row.arti, paket: row.paket }))
+              .forEach(w => {
+                const kunci = `${row.paket?.id}|${w.kata}`
+                const ada = kataHarian.get(kunci)
+                if (ada) { if (!ada.artiBadge && w.arti) ada.artiBadge = w.arti; return }
+                const item = { id: `${row.id}-${w.kata}`, tipe: 'badge', kataBadge: w.kata, artiBadge: w.arti, paket: row.paket }
+                kataHarian.set(kunci, item)
+                hasil.push(item)
+              })
+            return
           }
+          // BUKU: kata biasa (kanji/kana atau arti)
+          const cocokNormal = row.jp?.toLowerCase().includes(termLower) || row.arti?.toLowerCase().includes(termLower)
+          if (cocokNormal) hasil.push({ id: row.id, tipe: 'normal', jp: row.jp, arti: row.arti, paket: row.paket })
         })
-        setKamusHasil(hasil)
+        setKamusHasil(hasil.slice(0, 50))
       }
       setKamusLoading(false)
     }, 300)
@@ -733,11 +746,6 @@ export default function PaketList({ goTo, openPaket }) {
                           <div className="nama">
                             <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.kataBadge}</span>
                             {k.artiBadge && <span style={{ fontSize: 13, color: '#555' }}> — {k.artiBadge}</span>}
-                          </div>
-                          <div className="meta" style={{ display: 'block' }}>
-                            <span>muncul di kalimat: </span>
-                            <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{k.jp}</span>
-                            <span> — {k.arti}</span>
                           </div>
                         </>
                       ) : (
