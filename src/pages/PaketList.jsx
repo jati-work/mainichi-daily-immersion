@@ -2,6 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseStorage } from '../supabaseClient'
 import ImportExcel from '../components/ImportExcel'
 
+// Kata Baru boleh berisi arti per kata: "聞=telinga、見=lihat" (= atau ＝ antara kata & arti).
+// Pemisah antar pasangan: koma Jepang (、) atau koma biasa. Data lama tanpa arti tetap valid.
+function parseKataBaru(s) {
+  return String(s || '').split(/[,，、､]/).map(t => t.trim()).filter(Boolean).map(t => {
+    const i = t.search(/[=＝]/)
+    return i === -1 ? { kata: t, arti: '' } : { kata: t.slice(0, i).trim(), arti: t.slice(i + 1).trim() }
+  }).filter(x => x.kata)
+}
+
 export default function PaketList({ goTo, openPaket }) {
   const [folders, setFolders] = useState([])
   const [paketList, setPaketList] = useState([])
@@ -101,9 +110,9 @@ export default function PaketList({ goTo, openPaket }) {
           const cocokNormal = row.jp?.toLowerCase().includes(termLower) || row.arti?.toLowerCase().includes(termLower)
           if (cocokNormal) hasil.push({ id: row.id, tipe: 'normal', jp: row.jp, arti: row.arti, paket: row.paket })
           if (row.kata_baru) {
-            row.kata_baru.split(',').map(w => w.trim()).filter(Boolean)
-              .filter(w => w.toLowerCase().includes(termLower))
-              .forEach(w => hasil.push({ id: `${row.id}-${w}`, tipe: 'badge', kataBadge: w, jp: row.jp, arti: row.arti, paket: row.paket }))
+            parseKataBaru(row.kata_baru)
+              .filter(w => w.kata.toLowerCase().includes(termLower) || w.arti.toLowerCase().includes(termLower))
+              .forEach(w => hasil.push({ id: `${row.id}-${w.kata}`, tipe: 'badge', kataBadge: w.kata, artiBadge: w.arti, jp: row.jp, arti: row.arti, paket: row.paket }))
           }
         })
         setKamusHasil(hasil)
@@ -249,8 +258,9 @@ export default function PaketList({ goTo, openPaket }) {
       const sisi = sisiItem({ tipe: 'paket', data: { folder_id: row.paket?.folder_id ?? null, kolom: row.paket?.kolom } })
       if (sisi === 'kanan') {
         if (!row.kata_baru) return
-        row.kata_baru.split(',').map(w => w.trim()).filter(Boolean).forEach(w => {
-          hasil.push({ jp: w, arti: '', nama: row.paket?.nama, urutan: row.paket?.urutan })
+        // arti per kata (kalau udah diisi) ikut masuk ke export PDF/TXT
+        parseKataBaru(row.kata_baru).forEach(w => {
+          hasil.push({ jp: w.kata, arti: w.arti, nama: row.paket?.nama, urutan: row.paket?.urutan })
         })
       } else {
         hasil.push({ jp: row.jp, arti: row.arti, nama: row.paket?.nama, urutan: row.paket?.urutan })
@@ -722,6 +732,7 @@ export default function PaketList({ goTo, openPaket }) {
                         <>
                           <div className="nama">
                             <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.kataBadge}</span>
+                            {k.artiBadge && <span style={{ fontSize: 13, color: '#555' }}> — {k.artiBadge}</span>}
                           </div>
                           <div className="meta" style={{ display: 'block' }}>
                             <span>muncul di kalimat: </span>
