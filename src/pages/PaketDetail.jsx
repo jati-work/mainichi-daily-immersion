@@ -933,7 +933,7 @@ async function hapusPdf() {
     } else if (tes.dir === 'natural-dasar') {
       benar = normalisasiJP(val) === normalisasiJP(w.jp)
     }
-    const pakaiHint = !!tes.hint
+    const pakaiHint = !!tes.hint && !tes.latihan // pemanasan: hint bebas, nggak ada aturan "nggak dihitung"
     setTes(t => ({
       ...t, answered: true, salah: !benar,
       // benar TAPI pakai hint = nggak dihitung (nggak masuk skor, nggak otomatis hafal)
@@ -1317,11 +1317,11 @@ async function hapusPdf() {
                   ) : (
                     <div style={{ textAlign: 'center', margin: '10px 0' }}>
                       <button type="button" className="act-btn" style={{ fontSize: 12 }} onClick={() => setTes(t => ({ ...t, hint: true }))}>💡 Hint</button>
-                      <div style={{ fontSize: 10, color: '#9abaa8', marginTop: 3 }}>kalau dipakai, jawaban benar nggak dihitung</div>
+                      {!tes.latihan && <div style={{ fontSize: 10, color: '#9abaa8', marginTop: 3 }}>kalau dipakai, jawaban benar nggak dihitung</div>}
                     </div>
                   )
                 })()}
-                {tes.answered && !tes.salah && tes.hint && (
+                {tes.answered && !tes.salah && tes.hint && !tes.latihan && (
                   <div style={{ textAlign: 'center', fontSize: 12, color: '#7a6a2a', marginBottom: 8 }}>💡 Benar, tapi pakai hint, jadi nggak dihitung</div>
                 )}
                 {tes.answered && tes.salah && (
