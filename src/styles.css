@@ -231,3 +231,17 @@ button, input, textarea { font-family: inherit; }
   color: #fff; font-weight: 600; cursor: pointer; font-size: 13px;
 }
 .auth-error { color: #c0392b; font-size: 12px; margin-bottom: 10px; }
+
+/* ===== Font teks Jepang ala soal JLPT (Mincho tipis) =====
+   Pakai MS Mincho kalau ada di perangkat (Windows), cadangannya Noto Serif JP seperti sekarang.
+   unicode-range = hanya karakter Jepang (kana, kanji, tanda baca Jepang);
+   huruf latin tetap pakai font lamanya. Tempel di PALING BAWAH src/styles.css. */
+@font-face {
+  font-family: 'JLPT Mincho';
+  src: local('MS Mincho'), local('MS 明朝'), local('MS PMincho'), local('MS P明朝');
+  unicode-range: U+3000-303F, U+3040-309F, U+30A0-30FF, U+4E00-9FFF, U+FF00-FFEF;
+}
+.cover-title, .header-bar .title, .card-front, .baris-kalimat-jp, .badge-kata-baru, .auth-box h2,
+[style*="Noto Serif JP"] {
+  font-family: 'JLPT Mincho', 'Noto Serif JP', serif !important;
+}
