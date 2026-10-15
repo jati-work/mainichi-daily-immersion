@@ -4,6 +4,10 @@ import { loadXLSX, loadExcelJS } from '../lib/excelLoaders'
 
 // ---------- konfigurasi kolom per sisi ----------
 // kiri = Buku (kata + bunshuu), kanan = Harian (kalimat + konteks + nuansa)
+// kolom yang isinya teks Jepang -> di Excel dikasih font MS Mincho (tampilan ala soal JLPT)
+const KOLOM_JEPANG = ['jp', 'contoh_kalimat', 'kata_baru']
+const FONT_EXCEL_JEPANG = { name: 'MS Mincho', size: 12 }
+
 const KOLOM = {
   kiri: [
     { field: 'jp', judul: 'Kata JP', wajib: true, alias: ['jp', 'kata', 'katajp', 'kanji', 'kanjidasar', 'katajpdasar'] },
@@ -134,6 +138,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
 
       const ws = wb.addWorksheet(mode === 'root' ? 'Paket 1' : 'Kata')
       ws.columns = kolom.map(c => ({ header: c.judul, width: c.field === 'jp' || c.field === 'arti' ? 30 : 22 }))
+      kolom.forEach((c, i) => { if (KOLOM_JEPANG.includes(c.field)) ws.getColumn(i + 1).font = FONT_EXCEL_JEPANG })
       ws.getRow(1).eachCell((cell, i) => {
         cell.font = { bold: true, color: { argb: kolom[i - 1].wajib ? 'FFFFFFFF' : 'FF2D6A4A' } }
         if (kolom[i - 1].wajib) {
@@ -191,6 +196,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         { judul: 'Hafal', wch: 10 },
       ]
       ws.columns = semuaKolom.map(c => ({ header: c.judul, width: c.wch }))
+      kolom.forEach((c, i) => { if (KOLOM_JEPANG.includes(c.field)) ws.getColumn(i + 1).font = FONT_EXCEL_JEPANG })
       ws.getRow(1).font = { bold: true, color: { argb: 'FF2D6A4A' } }
 
       ;[...daftar].sort((a, b) => (a.urutan ?? 0) - (b.urutan ?? 0)).forEach(k => {
