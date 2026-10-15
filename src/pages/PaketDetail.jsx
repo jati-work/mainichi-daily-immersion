@@ -26,8 +26,17 @@ function normalisasiJP(s) {
 // pemisah Kata Baru: koma Jepang (、) ATAU koma biasa (,) -- dua-duanya diterima.
 // Disimpan ke DB selalu dengan pemisah ", " biar tampilan & pencarian lama tetap jalan.
 function pecahKataBaru(s) {
-  return String(s || '').split(/[,，、､]/).map(t => t.trim()).filter(Boolean)
+  return parseKataBaru(s).map(x => x.kata) // kata-nya aja (tanpa arti), dipakai buat badge & cek duplikat
 }
+// Kata Baru boleh berisi arti per kata: "聞=telinga、見=lihat" (= atau ＝ antara kata & arti).
+// Pemisah antar pasangan: koma Jepang (、) atau koma biasa. Data lama tanpa arti tetap valid.
+function parseKataBaru(s) {
+  return String(s || '').split(/[,，、､]/).map(t => t.trim()).filter(Boolean).map(t => {
+    const i = t.search(/[=＝]/)
+    return i === -1 ? { kata: t, arti: '' } : { kata: t.slice(0, i).trim(), arti: t.slice(i + 1).trim() }
+  }).filter(x => x.kata)
+}
+
 function normalisasiID(s) {
   return String(s).trim().toLowerCase().replace(/[、。！？\s]/g, '')
 }
@@ -94,12 +103,12 @@ function Kartu({
 // Lebih cocok buat kalimat/ekspresi yang lebih panjang.
 function BadgeKataBaru({ k }) {
   if (!k.kata_baru) return null
-  const words = pecahKataBaru(k.kata_baru)
+  const words = parseKataBaru(k.kata_baru)
   if (words.length === 0) return null
   return (
     <div className="badge-kata-baru-wrap">
       {words.map((w, i) => (
-        <span key={i} className={`badge-kata-baru ${k.hafal ? 'hafal' : ''}`}>{w}</span>
+        <span key={i} className={`badge-kata-baru ${k.hafal ? 'hafal' : ''}`} title={w.arti || undefined}>{w.kata}</span>
       ))}
     </div>
   )
@@ -191,8 +200,10 @@ export default function PaketDetail({ paketId, goTo }) {
   const [bagianInput, setBagianInput] = useState('')
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
+  const [artiKata, setArtiKata] = useState({}) // arti per kata di Kata Baru: { 聞: 'telinga' }
   const [sisiPaket, setSisiPaket] = useState('kiri') // 'kiri' = buku (kata+bunshuu), 'kanan' = harian (kalimat+konteks+nuansa)
   const jpInputRef = useRef(null)
+  const formSebarisRef = useRef(null)
   const kanjiTesRef = useRef(null)
   const artiTesRef = useRef(null)
   const bagianScrollRef = useRef(null)
@@ -277,6 +288,14 @@ export default function PaketDetail({ paketId, goTo }) {
     setAdaIsiDiary((data || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0))
   }
   useEffect(() => { muatSemua(); cekIsiDiary() }, [paketId])
+  // mulai edit -> form muncul di tempat kartunya; fokus ke isian pertama & pastikan kelihatan
+  useEffect(() => {
+    if (!editingId) return
+    setTimeout(() => {
+      formSebarisRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      jpInputRef.current?.focus()
+    }, 0)
+  }, [editingId])
 
   const bagianList = paket?.bagian_list || []
 
@@ -374,12 +393,20 @@ export default function PaketDetail({ paketId, goTo }) {
   // nulis ke DB doang, tanpa cek duplikat -- dipanggil dari simpanKata()
   // kalau lolos cek, ATAU dari tombol "Tetep Simpan" pas user override
   // warning kata (kalimat sama persis tetep TIDAK bisa di-override).
+  // susun nilai Kata Baru yang disimpan: "聞=telinga, 見=lihat" (arti yang kosong -> kata aja)
+  function gabungKataBaru(daftar = pecahKataBaru(kataBaruInput)) {
+    const udah = new Set()
+    return daftar.filter(w => !udah.has(w) && udah.add(w))
+      .map(w => (artiKata[w] || '').trim() ? `${w}=${artiKata[w].trim()}` : w).join(', ')
+  }
+
   async function simpanKataAktual(kataBaruOverride) {
+    const sedangEdit = !!editingId
     if (editingId) {
       const { error } = await supabase.from('kata').update({
         jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
-        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: pecahKataBaru(kataBaruOverride ?? kataBaruInput).join(', '),
+        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: kataBaruOverride ?? gabungKataBaru(),
         ...(sisiPaket === 'kiri' ? { plesetan: plesetan.trim() } : {}),
       }).eq('id', editingId)
       if (error) { alert('Gagal update: ' + error.message); return }
@@ -387,7 +414,7 @@ export default function PaketDetail({ paketId, goTo }) {
       const { error } = await supabase.from('kata').insert({
         paket_id: paketId, jp: jp.trim(), arti: arti.trim(), bagian: bagianInput || '',
         contoh_kalimat: contohKalimat.trim(), bunshuu: bunshuu.trim(),
-        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: pecahKataBaru(kataBaruOverride ?? kataBaruInput).join(', '), urutan: Date.now(),
+        konteks: konteks.trim(), nuansa: nuansa.trim(), kata_baru: kataBaruOverride ?? gabungKataBaru(), urutan: Date.now(),
         ...(sisiPaket === 'kiri' ? { plesetan: plesetan.trim() } : {}),
       })
       if (error) { alert('Gagal simpan: ' + error.message); return }
@@ -395,6 +422,12 @@ export default function PaketDetail({ paketId, goTo }) {
     // abis simpan/update kata, form-nya sengaja TETEP kebuka (beda sama
     // form-form lain) biar bisa langsung nambah/edit kata berikutnya tanpa
     // buka form & pilih bagian dari awal lagi
+    if (sedangEdit) {
+      // abis update: form sebaris nutup, kartunya langsung kelihatan hasilnya; mode edit tetap nyala
+      batalForm()
+      muatSemua()
+      return
+    }
     resetFieldsKataSaja()
     muatSemua()
   }
@@ -403,7 +436,7 @@ export default function PaketDetail({ paketId, goTo }) {
   // dipelajari dibuang dari Kata Baru (kata lain di Kata Baru tetap ada)
   function kataBaruTanpaDuplikat(d) {
     const kunci = new Set((d?.matches || []).map(m => normalisasiJP(m.kata)))
-    return pecahKataBaru(kataBaruInput).filter(t => !kunci.has(normalisasiJP(t))).join(', ')
+    return gabungKataBaru(pecahKataBaru(kataBaruInput).filter(t => !kunci.has(normalisasiJP(t))))
   }
 
   async function simpanKata() {
@@ -436,13 +469,13 @@ export default function PaketDetail({ paketId, goTo }) {
   // reset isian kata doang, form-nya TETEP kebuka & bagian yang lagi
   // dipilih TETEP kesimpen (beda sama batalForm yang nutup form total)
   function resetFieldsKataSaja() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setArtiKata({})
     setEditingId(null)
     setTimeout(() => jpInputRef.current?.focus(), 0)
   }
 
   function batalForm() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setBagianInput('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setArtiKata({}); setBagianInput('')
     setEditingId(null)
     setShowForm(false)
   }
@@ -502,7 +535,9 @@ export default function PaketDetail({ paketId, goTo }) {
     setPlesetan(k.plesetan || '')
     setKonteks(k.konteks || '')
     setNuansa(k.nuansa || '')
-    setKataBaruInput(k.kata_baru || '')
+    const pasangan = parseKataBaru(k.kata_baru)
+    setKataBaruInput(pasangan.map(x => x.kata).join('、'))
+    setArtiKata(Object.fromEntries(pasangan.filter(x => x.arti).map(x => [x.kata, x.arti])))
     setBagianInput(k.bagian || '')
     setShowForm(true)
   }
@@ -541,7 +576,96 @@ export default function PaketDetail({ paketId, goTo }) {
     else toggleFlip(k.id)
   }
 
+  // Form tambah/edit kata. sebaris = true -> dirender LANGSUNG di posisi kartu yang lagi diedit
+  // (nggak perlu scroll ke atas); false -> di atas daftar (buat nambah kata baru).
+  function renderFormKata(sebaris) {
+    return (
+        <div data-form-area ref={sebaris ? formSebarisRef : null}
+          onKeyDown={e => { if (e.key === 'Escape' && editingId) batalForm() }}
+          style={{ background: '#f0f7f0', borderRadius: 10, padding: 14, margin: sebaris ? '4px 0 8px' : '0 10px 10px', border: '1.5px solid #b8d8b8' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#2d6a4a', marginBottom: 8, letterSpacing: '.04em', textTransform: 'uppercase' }}>
+            {editingId ? '✏️ Edit Kata' : '＋ Tambah Kata'}
+          </div>
+          {bagianList.length > 0 && (
+            <select value={bagianInput} onChange={e => setBagianInput(e.target.value)}
+              style={{ width: '100%', padding: 7, borderRadius: 8, border: '1.5px solid #b8d8b8', marginBottom: 8, fontSize: 12 }}>
+              <option value="">— Semua (tanpa bagian) —</option>
+              {bagianList.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {sisiPaket === 'kanan' ? (
+              <>
+                <input ref={jpInputRef} tabIndex={1} placeholder="Kalimat / ekspresi Jepang" value={jp} onChange={e => setJp(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", gridColumn: '1 / -1' }} />
+                <input tabIndex={2} placeholder="Arti" value={arti} onChange={e => setArti(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', gridColumn: '1 / -1' }} />
+                <input tabIndex={3} placeholder="Kata baru yang dipelajari, pisah koma Jepang 、 (opsional)" value={kataBaruInput} onChange={e => setKataBaruInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", gridColumn: '1 / -1' }} />
+                {pecahKataBaru(kataBaruInput).length > 0 && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <div style={{ fontSize: 11, color: '#7a8a80', marginBottom: 4 }}>Arti tiap kata (opsional, ikut muncul di export hafalan). Pakai Tab buat pindah.</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 6 }}>
+                      {[...new Set(pecahKataBaru(kataBaruInput))].map(w => (
+                        <label key={w} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 15, minWidth: 44 }}>{w}</span>
+                          <input tabIndex={3} placeholder="arti" value={artiKata[w] || ''}
+                            onChange={e => setArtiKata(prev => ({ ...prev, [w]: e.target.value.replace(/[,，、]/g, '/').replace(/[=＝]/g, '') }))}
+                            onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                            style={{ flex: 1, minWidth: 0, padding: 6, borderRadius: 8, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <input tabIndex={4} placeholder="Konteks / situasi (opsional)" value={konteks} onChange={e => setKonteks(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+                <input tabIndex={5} placeholder="Nuansa, misal: formal/kasual (opsional)" value={nuansa} onChange={e => setNuansa(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+              </>
+            ) : (
+              <>
+                <input ref={jpInputRef} tabIndex={1} placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
+                <input tabIndex={3} placeholder="Contoh kalimat (opsional)" value={contohKalimat} onChange={e => setContohKalimat(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
+                <input tabIndex={2} placeholder="Arti ID" value={arti} onChange={e => setArti(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+                <input tabIndex={4} placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
+                <input tabIndex={5} placeholder="Plesetan Indo (opsional), misal: koro bu → kacang koro bu" value={plesetan} onChange={e => setPlesetan(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', gridColumn: '1 / -1' }} />
+              </>
+            )}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button tabIndex={6} className="act-btn active" onClick={simpanKata}
+                  style={{ flex: 1, padding: 10, fontWeight: 600 }}>{editingId ? 'Update' : 'Simpan'}</button>
+                {editingId && (
+                  <button tabIndex={7} className="act-btn" onClick={batalForm}
+                    style={{ padding: 10 }}>Batal</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+    )
+  }
+
   function renderKartu(k) {
+    if (showForm && editingId === k.id) {
+      return <div key={k.id} style={{ gridColumn: '1 / -1' }}>{renderFormKata(true)}</div>
+    }
     const Komponen = sisiPaket === 'kanan' ? BarisKalimat : Kartu
     return (
       <Komponen
@@ -753,6 +877,23 @@ async function hapusPdf() {
     const words = shuffle(sumber).map(k => ({ ...k, jp: jpMurni(k.jp) })) // tes TANPA romaji
     setTes({ dir, words, idx: 0, correct: 0, wrong: 0, benarIds: [], answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false, salahKanjiCount: 0, salahArtiCount: 0 })
   }
+  // PEMANASAN kata (Harian): soal diambil dari kata di Kata Baru yang udah diisi artinya,
+  // dari kalimat yang belum hafal. Cuma latihan: TIDAK mengubah status hafal apa pun.
+  // Pakai mesin tes yang sama: jp = kata, arti = arti kata (dir: 'dasar-arti' = Kata -> Arti, 'arti-dasar' = Arti -> Kata)
+  function startTesKata(dir) {
+    const baris = (filterBagian !== 'all' ? kataList.filter(k => k.bagian === filterBagian) : kataList).filter(k => !k.hafal)
+    const peta = new Map()
+    baris.forEach(row => parseKataBaru(row.kata_baru).filter(x => x.arti).forEach(x => {
+      const kunci = normalisasiJP(x.kata)
+      const ada = peta.get(kunci)
+      if (!ada) peta.set(kunci, { id: 'kata-' + kunci, jp: x.kata, arti: x.arti, kalimat: jpMurni(row.jp) })
+      else if (!ada.arti.split('/').map(normalisasiID).includes(normalisasiID(x.arti))) ada.arti += '/' + x.arti
+    }))
+    const words = shuffle([...peta.values()])
+    if (words.length === 0) { alert('Belum ada kata yang diisi artinya. Isi dulu arti tiap kata lewat form Edit Kata ya.'); return }
+    tutupPanelLain()
+    setTes({ dir, latihan: 'kata', words, idx: 0, correct: 0, wrong: 0, benarIds: [], answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false, salahKanjiCount: 0, salahArtiCount: 0 })
+  }
   function tesCek() {
     if (!tes || tes.answered) return
     const w = tes.words[tes.idx]
@@ -795,7 +936,7 @@ async function hapusPdf() {
   }
   async function tesLanjut() {
     if (tes.idx + 1 >= tes.words.length) {
-      if (tes.benarIds.length > 0) {
+      if (!tes.latihan && tes.benarIds.length > 0) {
         await Promise.all(tes.benarIds.map(id => supabase.from('kata').update({ hafal: true }).eq('id', id)))
         catatAktivitasHariIni()
         muatSemua()
@@ -892,6 +1033,10 @@ async function hapusPdf() {
                 <>
                   <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-arti'); setShowTesBawah(false) }}>Kalimat → Arti</button>
                   <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kalimat</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <div style={{ fontSize: 10, color: '#9abaa8', padding: '2px 6px', letterSpacing: '.06em', textTransform: 'uppercase' }}>Pemanasan (kata)</div>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTesKata('dasar-arti'); setShowTesBawah(false) }}>Kata → Arti</button>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTesKata('arti-dasar'); setShowTesBawah(false) }}>Arti → Kata</button>
                 </>
               ) : (
                 <>
@@ -939,63 +1084,7 @@ async function hapusPdf() {
         </div>
       </div>
 
-      {showForm && (
-        <div data-form-area style={{ background: '#f0f7f0', borderRadius: 10, padding: 14, margin: '0 10px 10px', border: '1.5px solid #b8d8b8' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#2d6a4a', marginBottom: 8, letterSpacing: '.04em', textTransform: 'uppercase' }}>
-            {editingId ? '✏️ Edit Kata' : '＋ Tambah Kata'}
-          </div>
-          {bagianList.length > 0 && (
-            <select value={bagianInput} onChange={e => setBagianInput(e.target.value)}
-              style={{ width: '100%', padding: 7, borderRadius: 8, border: '1.5px solid #b8d8b8', marginBottom: 8, fontSize: 12 }}>
-              <option value="">— Semua (tanpa bagian) —</option>
-              {bagianList.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-          )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {sisiPaket === 'kanan' ? (
-              <>
-                <input ref={jpInputRef} tabIndex={1} placeholder="Kalimat / ekspresi Jepang" value={jp} onChange={e => setJp(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", gridColumn: '1 / -1' }} />
-                <input tabIndex={2} placeholder="Arti" value={arti} onChange={e => setArti(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', gridColumn: '1 / -1' }} />
-                <input tabIndex={3} placeholder="Kata baru yang dipelajari, pisah koma Jepang 、 (opsional)" value={kataBaruInput} onChange={e => setKataBaruInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", gridColumn: '1 / -1' }} />
-                <input tabIndex={4} placeholder="Konteks / situasi (opsional)" value={konteks} onChange={e => setKonteks(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-                <input tabIndex={5} placeholder="Nuansa, misal: formal/kasual (opsional)" value={nuansa} onChange={e => setNuansa(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-              </>
-            ) : (
-              <>
-                <input ref={jpInputRef} tabIndex={1} placeholder="Kata JP dasar (kanji/kana)" value={jp} onChange={e => setJp(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
-                <input tabIndex={3} placeholder="Contoh kalimat (opsional)" value={contohKalimat} onChange={e => setContohKalimat(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif" }} />
-                <input tabIndex={2} placeholder="Arti ID" value={arti} onChange={e => setArti(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-                <input tabIndex={4} placeholder="Bunshuu, romaji (opsional)" value={bunshuu} onChange={e => setBunshuu(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8' }} />
-                <input tabIndex={5} placeholder="Plesetan Indo (opsional), misal: koro bu → kacang koro bu" value={plesetan} onChange={e => setPlesetan(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                  style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', gridColumn: '1 / -1' }} />
-              </>
-            )}
-            <div style={{ gridColumn: '1 / -1' }}>
-              <button tabIndex={6} className="act-btn active" onClick={simpanKata}
-                style={{ width: '100%', padding: 10, fontWeight: 600 }}>{editingId ? 'Update' : 'Simpan'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showForm && (!editingId || !displayList.some(k => k.id === editingId)) && renderFormKata(false)}
 
       <div className="grid-wrap">
         {!groupedView && (
@@ -1126,7 +1215,7 @@ async function hapusPdf() {
             )}
             {!selesai ? (
               <>
-                <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{tes.idx + 1} / {tes.words.length} · ✓ {tes.correct} · ✗ {tes.wrong}</div>
+                <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{tes.idx + 1} / {tes.words.length} · ✓ {tes.correct} · ✗ {tes.wrong}{tes.latihan ? ' · 🔥 pemanasan' : ''}</div>
                 {tes.dir === 'plesetan-kanji-arti' && (
                   <>
                     <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>Tulis Kanji & Artinya:</div>
@@ -1167,7 +1256,7 @@ async function hapusPdf() {
                 {tes.dir !== 'plesetan-kanji-arti' && (<>
                 <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>
                   {sisiPaket === 'kanan'
-                    ? { 'arti-dasar': 'Tulis Kalimatnya:', 'dasar-arti': 'Tulis Artinya:' }[tes.dir]
+                    ? { 'arti-dasar': tes.latihan ? 'Tulis Katanya:' : 'Tulis Kalimatnya:', 'dasar-arti': 'Tulis Artinya:' }[tes.dir]
                     : { 'arti-dasar': 'Tulis Kanji Dasarnya:', 'bunshuu-kanji': 'Tulis Kanji Dasarnya:', 'dasar-arti': 'Tulis Artinya:', 'dasar-bunshuu': 'Tulis Bunshuu-nya:', 'natural-dasar': 'Tulis Kanji Dasarnya:' }[tes.dir]}
                 </div>
                 <div style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, fontWeight: 600, marginBottom: 14, textAlign: 'center' }}>
@@ -1181,8 +1270,8 @@ async function hapusPdf() {
                     textAlign: 'center', fontSize: 18,
                     fontFamily: ['arti-dasar','bunshuu-kanji','natural-dasar'].includes(tes.dir) ? "'Noto Serif JP', serif" : 'inherit',
                     borderColor: tes.answered ? (tes.salah ? '#c0392b' : '#1e7d4f') : undefined,
-                    width: (tes.dir === 'natural-dasar' || (sisiPaket === 'kanan' && tes.dir === 'arti-dasar')) ? '100%' : undefined,
-                    boxSizing: (tes.dir === 'natural-dasar' || (sisiPaket === 'kanan' && tes.dir === 'arti-dasar')) ? 'border-box' : undefined,
+                    width: (tes.dir === 'natural-dasar' || (sisiPaket === 'kanan' && !tes.latihan && tes.dir === 'arti-dasar')) ? '100%' : undefined,
+                    boxSizing: (tes.dir === 'natural-dasar' || (sisiPaket === 'kanan' && !tes.latihan && tes.dir === 'arti-dasar')) ? 'border-box' : undefined,
                   }}
                 />
                 {tes.answered && tes.salah && (
@@ -1190,6 +1279,11 @@ async function hapusPdf() {
                     Jawaban: <b>
                       {{ 'arti-dasar': tes.words[tes.idx].jp, 'bunshuu-kanji': tes.words[tes.idx].jp, 'dasar-arti': tes.words[tes.idx].arti, 'dasar-bunshuu': tes.words[tes.idx].bunshuu, 'natural-dasar': tes.words[tes.idx].jp }[tes.dir]}
                     </b>
+                  </div>
+                )}
+                {tes.latihan && tes.answered && (
+                  <div style={{ textAlign: 'center', fontSize: 11, color: '#7a8a80', marginBottom: 8 }}>
+                    dari kalimat: <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{tes.words[tes.idx].kalimat}</span>
                   </div>
                 )}
                 </>)}
@@ -1205,7 +1299,7 @@ async function hapusPdf() {
                 <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 6 }}>{tes.correct / tes.words.length >= 0.8 ? '🎉' : tes.correct / tes.words.length >= 0.5 ? '💪' : '📚'}</div>
                 <div style={{ fontSize: 32, fontWeight: 700, textAlign: 'center', marginBottom: 6 }}>{tes.correct}/{tes.words.length}</div>
                 <div style={{ fontSize: 12, color: '#9abaa8', textAlign: 'center', marginBottom: 14 }}>
-                  {tes.benarIds.length > 0 ? `${tes.benarIds.length} kata otomatis diceklis hafal ✓` : 'Belum ada yang benar, coba lagi!'}
+                  {tes.latihan ? 'Pemanasan aja, status hafal nggak berubah. Tes kalimat yang menentukan 💪' : tes.benarIds.length > 0 ? `${tes.benarIds.length} kata otomatis diceklis hafal ✓` : 'Belum ada yang benar, coba lagi!'}
                 </div>
                 {tes.dir === 'plesetan-kanji-arti' && tes.wrong > 0 && (
                   <div style={{ fontSize: 12, color: '#888', textAlign: 'center', marginBottom: 14 }}>
@@ -1214,7 +1308,7 @@ async function hapusPdf() {
                 )}
                 <div className="modal-btns">
                   <button onClick={tutupTes}>Selesai</button>
-                  <button className="confirm" onClick={() => startTes(tes.dir)}>Ulangi</button>
+                  <button className="confirm" onClick={() => (tes.latihan ? startTesKata(tes.dir) : startTes(tes.dir))}>Ulangi</button>
                 </div>
               </>
             )}
