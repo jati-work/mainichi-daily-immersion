@@ -288,6 +288,12 @@ export default function PaketDetail({ paketId, goTo }) {
     setAdaIsiDiary((data || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0))
   }
   useEffect(() => { muatSemua(); cekIsiDiary() }, [paketId])
+  // pindah bagian -> daftar mulai dari ATAS lagi (bukan nerusin posisi scroll bagian sebelumnya)
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [filterBagian])
   // mulai edit -> form muncul di tempat kartunya; fokus ke isian pertama & pastikan kelihatan
   useEffect(() => {
     if (!editingId) return
@@ -875,7 +881,7 @@ async function hapusPdf() {
     if (sumber.length === 0) { alert('Tidak ada kata yang sesuai untuk mode tes ini!'); return }
     tutupPanelLain()
     const words = shuffle(sumber).map(k => ({ ...k, jp: jpMurni(k.jp) })) // tes TANPA romaji
-    setTes({ dir, words, idx: 0, correct: 0, wrong: 0, benarIds: [], answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false, salahKanjiCount: 0, salahArtiCount: 0 })
+    setTes({ dir, words, idx: 0, correct: 0, wrong: 0, hint: false, hintBenar: 0, benarIds: [], answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false, salahKanjiCount: 0, salahArtiCount: 0 })
   }
   // PEMANASAN kata (Harian): soal diambil dari kata di Kata Baru yang udah diisi artinya,
   // dari kalimat yang belum hafal. Cuma latihan: TIDAK mengubah status hafal apa pun.
@@ -892,7 +898,7 @@ async function hapusPdf() {
     const words = shuffle([...peta.values()])
     if (words.length === 0) { alert('Belum ada kata yang diisi artinya. Isi dulu arti tiap kata lewat form Edit Kata ya.'); return }
     tutupPanelLain()
-    setTes({ dir, latihan: 'kata', words, idx: 0, correct: 0, wrong: 0, benarIds: [], answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false, salahKanjiCount: 0, salahArtiCount: 0 })
+    setTes({ dir, latihan: 'kata', words, idx: 0, correct: 0, wrong: 0, hint: false, hintBenar: 0, benarIds: [], answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false, salahKanjiCount: 0, salahArtiCount: 0 })
   }
   function tesCek() {
     if (!tes || tes.answered) return
@@ -927,11 +933,14 @@ async function hapusPdf() {
     } else if (tes.dir === 'natural-dasar') {
       benar = normalisasiJP(val) === normalisasiJP(w.jp)
     }
+    const pakaiHint = !!tes.hint
     setTes(t => ({
       ...t, answered: true, salah: !benar,
-      correct: t.correct + (benar ? 1 : 0),
+      // benar TAPI pakai hint = nggak dihitung (nggak masuk skor, nggak otomatis hafal)
+      correct: t.correct + (benar && !pakaiHint ? 1 : 0),
       wrong: t.wrong + (benar ? 0 : 1),
-      benarIds: benar ? [...t.benarIds, w.id] : t.benarIds,
+      hintBenar: (t.hintBenar || 0) + (benar && pakaiHint ? 1 : 0),
+      benarIds: benar && !pakaiHint ? [...t.benarIds, w.id] : t.benarIds,
     }))
   }
   async function tesLanjut() {
@@ -943,9 +952,32 @@ async function hapusPdf() {
       }
       setTes(t => ({ ...t, idx: t.idx + 1 }))
     } else {
-      setTes(t => ({ ...t, idx: t.idx + 1, answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false }))
+      setTes(t => ({ ...t, idx: t.idx + 1, hint: false, answered: false, input: '', input2: '', salah: false, salahKanji: false, salahArti: false }))
       setTimeout(() => kanjiTesRef.current?.focus(), 0)
     }
+  }
+  // ---- HINT tes ----
+  // Kalimat berlubang: buang kanji-nya (batang kata, tanpa okurigana) dari kalimat contoh, ganti ＿.
+  // Kalau nggak ketemu di kalimat -> null (hint kalimat nggak dikasih, daripada bocor).
+  function lubangiKalimat(kata, kalimat) {
+    if (!kata || !kalimat) return null
+    let batang = /[\u4e00-\u9faf々]/.test(kata) ? kata.replace(/[ぁ-ゟァ-ヿー]+$/, '') : kata
+    if (!batang) batang = kata
+    return kalimat.includes(batang) ? kalimat.split(batang).join('＿') : null
+  }
+  // Hint cuma ada di: Kanji/Kata -> Arti (huruf pertama arti) dan Arti -> Kanji/Kata (kalimat berlubang).
+  // Tes KALIMAT Harian (yang menentukan hafal) TANPA hint. Mode lain nggak ada hint.
+  function buatHint(w, dir) {
+    if (!w || (sisiPaket === 'kanan' && !tes?.latihan)) return null
+    if (dir === 'dasar-arti') {
+      const arti = String(w.arti || '').split(/[/;]/)[0].trim()
+      return arti ? { jenis: 'huruf', teks: arti[0] + '…' } : null
+    }
+    if (dir === 'arti-dasar' || dir === 'bunshuu-kanji') {
+      const kal = lubangiKalimat(w.jp, tes?.latihan ? w.kalimat : w.contoh_kalimat)
+      return kal ? { jenis: 'kalimat', teks: kal } : null
+    }
+    return null
   }
   function tutupTes() { setTes(null); setShowRadikalTes(false) }
 
@@ -1274,6 +1306,24 @@ async function hapusPdf() {
                     boxSizing: (tes.dir === 'natural-dasar' || (sisiPaket === 'kanan' && !tes.latihan && tes.dir === 'arti-dasar')) ? 'border-box' : undefined,
                   }}
                 />
+                {!tes.answered && (() => {
+                  const h = buatHint(tes.words[tes.idx], tes.dir)
+                  if (!h) return null
+                  return tes.hint ? (
+                    <div style={{ textAlign: 'center', margin: '10px 0', fontSize: 14, color: '#7a6a2a', background: '#fff8e1', borderRadius: 8, padding: '6px 10px' }}>
+                      💡 {h.jenis === 'huruf' ? 'Huruf pertama: ' : 'Kalimat: '}
+                      <span style={{ fontFamily: h.jenis === 'kalimat' ? "'Noto Serif JP', serif" : 'inherit', fontWeight: 600 }}>{h.teks}</span>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', margin: '10px 0' }}>
+                      <button type="button" className="act-btn" style={{ fontSize: 12 }} onClick={() => setTes(t => ({ ...t, hint: true }))}>💡 Hint</button>
+                      <div style={{ fontSize: 10, color: '#9abaa8', marginTop: 3 }}>kalau dipakai, jawaban benar nggak dihitung</div>
+                    </div>
+                  )
+                })()}
+                {tes.answered && !tes.salah && tes.hint && (
+                  <div style={{ textAlign: 'center', fontSize: 12, color: '#7a6a2a', marginBottom: 8 }}>💡 Benar, tapi pakai hint, jadi nggak dihitung</div>
+                )}
                 {tes.answered && tes.salah && (
                   <div style={{ textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8 }}>
                     Jawaban: <b>
@@ -1299,8 +1349,11 @@ async function hapusPdf() {
                 <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 6 }}>{tes.correct / tes.words.length >= 0.8 ? '🎉' : tes.correct / tes.words.length >= 0.5 ? '💪' : '📚'}</div>
                 <div style={{ fontSize: 32, fontWeight: 700, textAlign: 'center', marginBottom: 6 }}>{tes.correct}/{tes.words.length}</div>
                 <div style={{ fontSize: 12, color: '#9abaa8', textAlign: 'center', marginBottom: 14 }}>
-                  {tes.latihan ? 'Pemanasan aja, status hafal nggak berubah. Tes kalimat yang menentukan 💪' : tes.benarIds.length > 0 ? `${tes.benarIds.length} kata otomatis diceklis hafal ✓` : 'Belum ada yang benar, coba lagi!'}
+                  {tes.latihan ? 'Pemanasan aja, status hafal nggak berubah. Tes kalimat yang menentukan 💪' : tes.benarIds.length > 0 ? `${tes.benarIds.length} kata otomatis diceklis hafal ✓` : tes.hintBenar > 0 ? 'Yang benar tadi pakai hint, jadi belum ada yang otomatis hafal.' : 'Belum ada yang benar, coba lagi!'}
                 </div>
+                {tes.hintBenar > 0 && (
+                  <div style={{ fontSize: 12, color: '#7a6a2a', textAlign: 'center', marginBottom: 14 }}>💡 {tes.hintBenar} jawaban benar pakai hint, nggak dihitung</div>
+                )}
                 {tes.dir === 'plesetan-kanji-arti' && tes.wrong > 0 && (
                   <div style={{ fontSize: 12, color: '#888', textAlign: 'center', marginBottom: 14 }}>
                     Salah kanji: <b>{tes.salahKanjiCount}</b> · Salah arti: <b>{tes.salahArtiCount}</b>
