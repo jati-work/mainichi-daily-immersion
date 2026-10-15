@@ -39,6 +39,8 @@ function normJP(s) {
 const kunciHeader = h => String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
 // pemisah Kata Baru: koma Jepang (、) tanpa spasi ATAU koma biasa (, ) -- dua-duanya diterima
 const pecahTag = s => String(s || '').split(/[,，、､]/).map(w => w.trim()).filter(Boolean)
+// Kata Baru boleh "kata=arti" (atau ＝). kataSaja() ambil kata-nya aja buat pencocokan.
+const kataSaja = t => String(t).split(/[=＝]/)[0].trim()
 
 // ambil jp + kata_baru semua kata (Supabase default cuma ngembaliin 1000 baris per request)
 // DIPAKAI CUMA BUAT INFO di pratinjau: Kata Baru yang udah pernah dicatat. Nggak nahan import.
@@ -108,7 +110,8 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState(null)
   const [paksa, setPaksa] = useState(false)
-  const [simpanKataLama, setSimpanKataLama] = useState(false) // false = "Oke, saya ingat" (kata lama nggak dicatat lagi), true = "Tetep simpan"
+  // kata lama yang DICENTANG = tetep disimpan (kunci "idSheet|kataTernormalisasi"); yang nggak dicentang = "oke, saya ingat"
+  const [simpanSet, setSimpanSet] = useState(() => new Set())
   const [kolomPilih, setKolomPilih] = useState(new Set()) // kolom yang di-update buat kata yang cocok
   const inputRef = useRef(null)
   const wrapRef = useRef(null)
@@ -149,7 +152,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         mode === 'root'
           ? 'Satu sheet = satu paket baru. Nama sheet jadi nama paket (maks. 31 karakter). Tambah sheet buat paket lain.'
           : 'Cuma sheet pertama (selain sheet Petunjuk ini) yang dibaca.',
-        sisi === 'kanan' ? 'Kata Baru: pisahkan pakai koma Jepang (、) tanpa spasi, contoh: 勉強、宿題. Koma biasa (,) juga masih bisa.' : '',
+        sisi === 'kanan' ? 'Kata Baru: pisahkan pakai koma Jepang (、) tanpa spasi, contoh: 勉強、宿題. Arti per kata boleh ditambah pakai = atau ＝, contoh: 勉強＝belajar、宿題＝PR (artinya jangan pakai koma). Koma biasa (,) juga masih bisa.' : '',
         sisi === 'kiri' ? 'Plesetan Indo: plesetan bunyi kata dalam bahasa Indonesia (jembatan keledai), contoh: koro bu → kacang koro bu. Dipakai di mode tes "Plesetan → Kanji + Arti".' : '',
         'Bagian: nama bagian (contoh: Episode 1). Bagian yang belum ada dibuat otomatis.',
         'Semua baris yang lengkap masuk sebagai kata baru, urut sesuai baris di file. Nggak ada pengecekan duplikat.',
@@ -252,27 +255,24 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         dbKata.forEach(r => {
           const info = { nama: r.paket?.nama, tanggal: r.paket?.tanggal }
           tambah(normJP(r.jp), info)
-          pecahTag(r.kata_baru).forEach(t => tambah(normJP(t), info))
+          pecahTag(r.kata_baru).forEach(t => tambah(normJP(kataSaja(t)), info))
         })
-        sheets.forEach(sh => {
+        sheets.forEach((sh, si) => {
           const udah = new Set()
+          sh.kid = si
           sh.kataSama = []
           sh.kataSamaKunci = udah
-          sh.barisLama = 0 // (Buku) jumlah baris yang katanya udah pernah ada
           ;(sh.ok || []).forEach(r => {
             if (sisi === 'kanan') {
               pecahTag(r.kata_baru).forEach(t => {
-                const kunci = normJP(t)
+                const kunci = normJP(kataSaja(t))
                 const di = peta.get(kunci)
-                if (di && di.length && !udah.has(kunci)) { udah.add(kunci); sh.kataSama.push({ kata: t, di }) }
+                if (di && di.length && !udah.has(kunci)) { udah.add(kunci); sh.kataSama.push({ kata: kataSaja(t), kunci, di }) }
               })
             } else {
               const kunci = normJP(r.jp)
               const di = peta.get(kunci)
-              if (di && di.length) {
-                sh.barisLama++
-                if (!udah.has(kunci)) { udah.add(kunci); sh.kataSama.push({ kata: r.jp, di }) }
-              }
+              if (di && di.length && !udah.has(kunci)) { udah.add(kunci); sh.kataSama.push({ kata: r.jp, kunci, di }) }
             }
           })
         })
@@ -297,7 +297,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
       }
 
       setPaksa(false)
-      setSimpanKataLama(false)
+      setSimpanSet(new Set())
       setKolomPilih(new Set(sheets.flatMap(s => (s.cocok || []).flatMap(c => Object.keys(c.perubahan))).filter(f => f !== 'bagian')))
       setPreview({ namaFile: file.name, sheets, catatan })
     } catch (err) {
@@ -307,7 +307,21 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
   }
 
   const cocokEfektif = s => (s.cocok || []).filter(c => Object.keys(c.perubahan).some(f => kolomPilih.has(f)))
-  const hitungMasuk = s => s.ok.length - (sisi === 'kiri' && !simpanKataLama ? (s.barisLama || 0) : 0) + (paksa ? s.warn.length : 0) + s.update.length + cocokEfektif(s).length
+  // Buku: baris yang katanya udah pernah ada & NGGAK dicentang = nggak dimasukin
+  const barisDibuang = s => sisi !== 'kiri' ? 0 : s.ok.filter(r => {
+    const k = normJP(r.jp)
+    return s.kataSamaKunci?.has(k) && !simpanSet.has(s.kid + '|' + k)
+  }).length
+  const toggleSimpan = (s, kunci, on) => setSimpanSet(prev => {
+    const n = new Set(prev); const key = s.kid + '|' + kunci
+    on ? n.add(key) : n.delete(key); return n
+  })
+  const pilihSemua = (s, on) => setSimpanSet(prev => {
+    const n = new Set(prev)
+    s.kataSama.forEach(k => { const key = s.kid + '|' + k.kunci; on ? n.add(key) : n.delete(key) })
+    return n
+  })
+  const hitungMasuk = s => s.ok.length - barisDibuang(s) + (paksa ? s.warn.length : 0) + s.update.length + cocokEfektif(s).length
 
   async function jalankan() {
     setBusy(true)
@@ -340,14 +354,15 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           kataUpdate += hasilBatch.length
         }
         const rows = [...s.ok, ...(paksa ? s.warn : [])]
-          .filter(r => !(sisi === 'kiri' && !simpanKataLama && s.kataSamaKunci?.has(normJP(r.jp))))
+          .filter(r => !(sisi === 'kiri' && s.kataSamaKunci?.has(normJP(r.jp)) && !simpanSet.has(s.kid + '|' + normJP(r.jp))))
           .sort((a, b) => (a._no ?? 0) - (b._no ?? 0)).map(r => ({
           ...r,
           bagian: r.bagian || (mode === 'paket' ? bagianAktif : ''),
           // "Oke, saya ingat": kata yang udah pernah dipelajari dibuang dari Kata Baru, kalimatnya tetap masuk
           // sekalian diseragamkan ke format simpanan app (pemisah ", "), apa pun pemisah di Excel-nya
           kata_baru: pecahTag(r.kata_baru)
-            .filter(t => simpanKataLama || !s.kataSamaKunci?.size || !s.kataSamaKunci.has(normJP(t)))
+            .filter(t => { const k = normJP(kataSaja(t)); return !s.kataSamaKunci?.has(k) || simpanSet.has(s.kid + '|' + k) })
+            .map(t => t.replace('＝', '='))
             .join(', '),
         }))
         if (rows.length === 0 && s.update.length === 0) continue
@@ -404,7 +419,6 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
 
   // ---------- tampilan ----------
   const totalMasuk = preview ? preview.sheets.reduce((n, s) => n + hitungMasuk(s), 0) : 0
-  const totalKataSama = preview ? preview.sheets.reduce((n, sh) => n + (sh.kataSama || []).length, 0) : 0
   const totalWarn = preview ? preview.sheets.reduce((n, s) => n + s.warn.length, 0) : 0
   const totalUpdate = preview ? preview.sheets.reduce((n, s) => n + s.update.length + cocokEfektif(s).length, 0) : 0
   const kolomCocok = preview
@@ -413,6 +427,9 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         .filter(c => c.jumlah > 0)
     : []
   const kecil = { fontSize: 11, color: '#7a8a80', lineHeight: 1.6 }
+  // ukuran dipaksa biar nggak ikut gaya input global (yang bikin checkbox melebar & berantakan)
+  const cbStyle = { width: 16, height: 16, minWidth: 16, padding: 0, margin: '2px 0 0', flex: 'none', cursor: 'pointer' }
+  const miniBtn = { fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid #b8d8b8', background: '#f0f7f0', color: '#2d6a4a', cursor: 'pointer', width: 'auto' }
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block', ...style }}>
@@ -459,21 +476,42 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
                     <div style={{ fontSize: 12 }}>
                       {s.update.length > 0 && `🔄 ${s.update.length} di-update · `}
                       {(s.cocok || []).length > 0 && `🔁 ${s.cocok.length} cocok & berubah · `}
-                      ✅ {s.ok.length + (paksa ? s.warn.length : 0)} baru masuk
+                      ✅ {s.ok.length - barisDibuang(s) + (paksa ? s.warn.length : 0)} baru masuk
                       {s.blok.length + s.dobel.length + (paksa ? 0 : s.warn.length) > 0 && ` · ⏭ ${s.blok.length + s.dobel.length + (paksa ? 0 : s.warn.length)} dilewati`}
                       {s.lengkap.length > 0 && ` · ❗ ${s.lengkap.length} baris nggak lengkap`}
                       {(s.sama || []).length > 0 && ` · = ${s.sama.length} sama persis`}
                       {(s.ambigu || []).length > 0 && ` · ❓ ${s.ambigu.length} ambigu`}
                     </div>
-                    {(s.kataSama || []).length > 0 && (
-                      <div style={{ ...kecil, marginTop: 4 }}>
-                        🔔 {s.kataSama.length} kata{sisi === 'kanan' ? ' di Kata Baru' : ''} udah pernah dipelajari:
-                        {s.kataSama.slice(0, 6).map((k, i) => (
-                          <div key={'ks' + i}><span style={{ fontFamily: "'Noto Serif JP', serif" }}>{k.kata}</span> — di {ringkasDi(k.di)}</div>
-                        ))}
-                        {s.kataSama.length > 6 && <div>…dan yang lain</div>}
-                      </div>
-                    )}
+                    {(s.kataSama || []).length > 0 && (() => {
+                      const disimpan = s.kataSama.filter(k => simpanSet.has(s.kid + '|' + k.kunci)).length
+                      return (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#2d6a4a' }}>
+                            🌱 {s.kataSama.length} kata{sisi === 'kanan' ? ' di Kata Baru' : ''} udah pernah dipelajari
+                          </div>
+                          <div style={kecil}>
+                            Coba inget artinya dulu. Yang <b>dicentang</b> tetap disimpan, yang <b>nggak dicentang</b> dianggap udah ingat
+                            {sisi === 'kanan' ? ' (dibuang dari Kata Baru, kalimatnya tetap masuk).' : ' (barisnya nggak dimasukin).'}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '6px 0' }}>
+                            <button type="button" style={miniBtn} onClick={() => pilihSemua(s, true)}>Simpan semua</button>
+                            <button type="button" style={miniBtn} onClick={() => pilihSemua(s, false)}>Ingat semua</button>
+                            <span style={{ ...kecil, marginLeft: 'auto' }}>{disimpan} disimpan · {s.kataSama.length - disimpan} ingat</span>
+                          </div>
+                          <div style={{ maxHeight: 210, overflowY: 'auto', border: '1px solid #e3eee3', borderRadius: 8, padding: '2px 8px', background: '#fff' }}>
+                            {s.kataSama.map((k, i) => (
+                              <label key={k.kunci} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, padding: '6px 0', cursor: 'pointer', borderTop: i === 0 ? 'none' : '1px solid #f0f5f0' }}>
+                                <input type="checkbox" checked={simpanSet.has(s.kid + '|' + k.kunci)} onChange={e => toggleSimpan(s, k.kunci, e.target.checked)} style={cbStyle} />
+                                <span style={{ lineHeight: 1.5 }}>
+                                  <span style={{ fontFamily: "'Noto Serif JP', serif", fontWeight: 600 }}>{k.kata}</span>
+                                  <span style={{ color: '#7a8a80' }}> — di {ringkasDi(k.di)}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
                     {[...s.blok, ...(paksa ? [] : s.warn)].slice(0, 6).map((b, i) => (
                       <div key={i} style={kecil}>
                         <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{b.jp}</span> — udah ada di {ringkasDi(b.di)}
@@ -493,26 +531,6 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
                 )}
               </div>
             ))}
-
-            {totalKataSama > 0 && (
-              <div style={{ border: '1.5px solid #d6e8d6', borderRadius: 10, padding: 10, margin: '10px 0' }}>
-                <div style={{ fontWeight: 700, fontSize: 12, color: '#2d6a4a', marginBottom: 4 }}>
-                  {sisi === 'kanan'
-                    ? '🌱 Kata yang udah pernah dipelajari: coba inget artinya dulu. Kalimatnya tetap masuk, mau katanya gimana?'
-                    : '🌱 Kata yang udah pernah dipelajari: coba inget artinya dulu. Mau barisnya gimana?'}
-                </div>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, padding: '3px 0', cursor: 'pointer' }}>
-                  <input type="radio" name="kataLama" checked={!simpanKataLama} onChange={() => setSimpanKataLama(false)} style={{ marginTop: 2 }} />
-                  <span><b>Oke, saya ingat</b> — {sisi === 'kanan'
-                    ? 'kata itu nggak dicatat lagi di Kata Baru, kalimatnya tetap masuk'
-                    : 'baris kata itu nggak dimasukin (bunshuu, plesetan, dll ikut nggak masuk), kata lain tetap masuk'}</span>
-                </label>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, padding: '3px 0', cursor: 'pointer' }}>
-                  <input type="radio" name="kataLama" checked={simpanKataLama} onChange={() => setSimpanKataLama(true)} style={{ marginTop: 2 }} />
-                  <span><b>Tetep simpan</b> — {sisi === 'kanan' ? 'kalimat dan katanya sama-sama masuk' : 'baris kata itu tetap masuk'}</span>
-                </label>
-              </div>
-            )}
 
             {kolomCocok.length > 0 && (
               <div style={{ border: '1.5px solid #d6e8d6', borderRadius: 10, padding: 10, margin: '10px 0' }}>
