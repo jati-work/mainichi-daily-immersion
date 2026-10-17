@@ -157,7 +157,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
         mode === 'root'
           ? 'Satu sheet = satu paket baru. Nama sheet jadi nama paket (maks. 31 karakter). Tambah sheet buat paket lain.'
           : 'Cuma sheet pertama (selain sheet Petunjuk ini) yang dibaca.',
-        sisi === 'kanan' ? 'Kata Baru: pisahkan pakai koma Jepang (、) tanpa spasi, contoh: 勉強、宿題. Arti per kata boleh ditambah pakai = atau ＝, contoh: 勉強＝belajar、宿題＝PR (artinya jangan pakai koma). Koma biasa (,) juga masih bisa.' : '',
+        sisi === 'kanan' ? 'Kata Baru: pisahkan pakai koma Jepang (、) tanpa spasi, contoh: 勉強、宿題. Arti per kata boleh ditambah pakai = atau ＝, contoh: 勉強＝belajar、宿題＝PR (artinya jangan pakai koma). Info perubahan kata (opsional): 過ごす=menghabiskan waktu|過ごせます|可能形 (kata=arti|bentuk di kalimat|jenis). Koma biasa (,) juga masih bisa.' : '',
         sisi === 'kiri' ? 'Plesetan Indo: plesetan bunyi kata dalam bahasa Indonesia (jembatan keledai), contoh: koro bu → kacang koro bu. Dipakai di mode tes "Plesetan → Kanji + Arti".' : '',
         'Bagian: nama bagian (contoh: Episode 1). Bagian yang belum ada dibuat otomatis.',
         'Semua baris yang lengkap masuk sebagai kata baru, urut sesuai baris di file. Nggak ada pengecekan duplikat.',
@@ -368,7 +368,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           // sekalian diseragamkan ke format simpanan app (pemisah ", "), apa pun pemisah di Excel-nya
           kata_baru: pecahTag(r.kata_baru)
             .filter(t => { const k = normJP(kataSaja(t)); return !s.kataSamaKunci?.has(k) || simpanSet.has(s.kid + '|' + k) })
-            .map(t => t.replace('＝', '='))
+            .map(t => t.replace('＝', '=').replace('｜', '|'))
             .join(', '),
         }))
         if (rows.length === 0 && s.update.length === 0) continue
