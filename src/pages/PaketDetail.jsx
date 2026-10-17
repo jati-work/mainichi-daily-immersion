@@ -30,12 +30,28 @@ function pecahKataBaru(s) {
 }
 // Kata Baru boleh berisi arti per kata: "聞=telinga、見=lihat" (= atau ＝ antara kata & arti).
 // Pemisah antar pasangan: koma Jepang (、) atau koma biasa. Data lama tanpa arti tetap valid.
+// Format lengkap per kata: "過ごす=menghabiskan waktu|過ごせます|可能形" -> kata=arti|bentuk di kalimat|jenis perubahan
 function parseKataBaru(s) {
   return String(s || '').split(/[,，、､]/).map(t => t.trim()).filter(Boolean).map(t => {
     const i = t.search(/[=＝]/)
-    return i === -1 ? { kata: t, arti: '' } : { kata: t.slice(0, i).trim(), arti: t.slice(i + 1).trim() }
+    if (i === -1) return { kata: t, arti: '', bentuk: '', jenis: '' }
+    const [arti = '', bentuk = '', jenis = ''] = t.slice(i + 1).split(/[|｜]/).map(x => x.trim())
+    return { kata: t.slice(0, i).trim(), arti, bentuk, jenis }
   }).filter(x => x.kata)
 }
+// daftar jenis perubahan kata (nilai = yang disimpan, label = yang kelihatan di dropdown)
+const JENIS_PERUBAHAN = [
+  { nilai: 'ます形', label: 'ます形 (sopan)' },
+  { nilai: 'て形', label: 'て形' },
+  { nilai: 'た形', label: 'た形 (lampau)' },
+  { nilai: 'ない形', label: 'ない形 (negatif)' },
+  { nilai: '可能形', label: '可能形 (potensial)' },
+  { nilai: '受身形', label: '受身形 (pasif)' },
+  { nilai: '使役形', label: '使役形 (kausatif)' },
+  { nilai: '命令形', label: '命令形 (imperatif)' },
+  { nilai: '意向形', label: '意向形 (ajakan)' },
+  { nilai: '条件形', label: '条件形 (kondisional)' },
+]
 
 function normalisasiID(s) {
   return String(s).trim().toLowerCase().replace(/[、。！？\s]/g, '')
@@ -108,7 +124,7 @@ function BadgeKataBaru({ k }) {
   return (
     <div className="badge-kata-baru-wrap">
       {words.map((w, i) => (
-        <span key={i} className={`badge-kata-baru ${k.hafal ? 'hafal' : ''}`} title={w.arti || undefined}>{w.kata}</span>
+        <span key={i} className={`badge-kata-baru ${k.hafal ? 'hafal' : ''}`} title={[w.arti, w.bentuk && `${w.bentuk}${w.jenis ? ' (' + w.jenis + ')' : ''}`].filter(Boolean).join(' · ') || undefined}>{w.kata}</span>
       ))}
     </div>
   )
@@ -201,6 +217,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [artiKata, setArtiKata] = useState({}) // arti per kata di Kata Baru: { 聞: 'telinga' }
+  const [ubahKata, setUbahKata] = useState({}) // perubahan per kata: { 過ごす: { bentuk: '過ごせます', jenis: '可能形' } }
   const [sisiPaket, setSisiPaket] = useState('kiri') // 'kiri' = buku (kata+bunshuu), 'kanan' = harian (kalimat+konteks+nuansa)
   const jpInputRef = useRef(null)
   const formSebarisRef = useRef(null)
@@ -403,7 +420,13 @@ export default function PaketDetail({ paketId, goTo }) {
   function gabungKataBaru(daftar = pecahKataBaru(kataBaruInput)) {
     const udah = new Set()
     return daftar.filter(w => !udah.has(w) && udah.add(w))
-      .map(w => (artiKata[w] || '').trim() ? `${w}=${artiKata[w].trim()}` : w).join(', ')
+      .map(w => {
+        const arti = (artiKata[w] || '').trim()
+        const bentuk = (ubahKata[w]?.bentuk || '').trim()
+        const jenis = ubahKata[w]?.jenis || ''
+        if (bentuk || jenis) return `${w}=${arti}|${bentuk}|${jenis}`
+        return arti ? `${w}=${arti}` : w
+      }).join(', ')
   }
 
   async function simpanKataAktual(kataBaruOverride) {
@@ -475,13 +498,13 @@ export default function PaketDetail({ paketId, goTo }) {
   // reset isian kata doang, form-nya TETEP kebuka & bagian yang lagi
   // dipilih TETEP kesimpen (beda sama batalForm yang nutup form total)
   function resetFieldsKataSaja() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setArtiKata({})
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setArtiKata({}); setUbahKata({})
     setEditingId(null)
     setTimeout(() => jpInputRef.current?.focus(), 0)
   }
 
   function batalForm() {
-    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setArtiKata({}); setBagianInput('')
+    setJp(''); setArti(''); setContohKalimat(''); setBunshuu(''); setPlesetan(''); setKonteks(''); setNuansa(''); setKataBaruInput(''); setArtiKata({}); setUbahKata({}); setBagianInput('')
     setEditingId(null)
     setShowForm(false)
   }
@@ -544,6 +567,7 @@ export default function PaketDetail({ paketId, goTo }) {
     const pasangan = parseKataBaru(k.kata_baru)
     setKataBaruInput(pasangan.map(x => x.kata).join('、'))
     setArtiKata(Object.fromEntries(pasangan.filter(x => x.arti).map(x => [x.kata, x.arti])))
+    setUbahKata(Object.fromEntries(pasangan.filter(x => x.bentuk || x.jenis).map(x => [x.kata, { bentuk: x.bentuk, jenis: x.jenis }])))
     setBagianInput(k.bagian || '')
     setShowForm(true)
   }
@@ -613,16 +637,30 @@ export default function PaketDetail({ paketId, goTo }) {
                   style={{ padding: 8, borderRadius: 8, border: '1.5px solid #b8d8b8', fontFamily: "'Noto Serif JP', serif", gridColumn: '1 / -1' }} />
                 {pecahKataBaru(kataBaruInput).length > 0 && (
                   <div style={{ gridColumn: '1 / -1' }}>
-                    <div style={{ fontSize: 11, color: '#7a8a80', marginBottom: 4 }}>Arti tiap kata (opsional, ikut muncul di export hafalan). Pakai Tab buat pindah.</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 6 }}>
+                    <div style={{ fontSize: 11, color: '#7a8a80', marginBottom: 4 }}>Arti tiap kata (opsional, ikut muncul di export hafalan). Kalau kata berubah bentuk di kalimat, isi bentuknya dan pilih jenisnya biar bisa dicari di kamus. Pakai Tab buat pindah.</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
                       {[...new Set(pecahKataBaru(kataBaruInput))].map(w => (
-                        <label key={w} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 15, minWidth: 44 }}>{w}</span>
-                          <input tabIndex={3} placeholder="arti" value={artiKata[w] || ''}
-                            onChange={e => setArtiKata(prev => ({ ...prev, [w]: e.target.value.replace(/[,，、]/g, '/').replace(/[=＝]/g, '') }))}
-                            onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                            style={{ flex: 1, minWidth: 0, padding: 6, borderRadius: 8, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
-                        </label>
+                        <div key={w} style={{ display: 'grid', gap: 4 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 15, minWidth: 44 }}>{w}</span>
+                            <input tabIndex={3} placeholder="arti" value={artiKata[w] || ''}
+                              onChange={e => setArtiKata(prev => ({ ...prev, [w]: e.target.value.replace(/[,，、]/g, '/').replace(/[=＝|｜]/g, '') }))}
+                              onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                              style={{ flex: 1, minWidth: 0, padding: 6, borderRadius: 8, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
+                          </label>
+                          <div style={{ display: 'flex', gap: 6, paddingLeft: 52 }}>
+                            <input tabIndex={3} placeholder="bentuk di kalimat (opsional)" value={ubahKata[w]?.bentuk || ''}
+                              onChange={e => setUbahKata(prev => ({ ...prev, [w]: { ...prev[w], bentuk: e.target.value.replace(/[,，、=＝|｜]/g, '') } }))}
+                              onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                              style={{ flex: 1, minWidth: 0, padding: 6, borderRadius: 8, border: '1.5px solid #b8d8b8', fontSize: 13, fontFamily: "'Noto Serif JP', serif" }} />
+                            <select tabIndex={3} value={ubahKata[w]?.jenis || ''}
+                              onChange={e => setUbahKata(prev => ({ ...prev, [w]: { ...prev[w], jenis: e.target.value } }))}
+                              style={{ padding: 6, borderRadius: 8, border: '1.5px solid #b8d8b8', fontSize: 12, maxWidth: 150 }}>
+                              <option value="">jenis…</option>
+                              {JENIS_PERUBAHAN.map(j => <option key={j.nilai} value={j.nilai}>{j.label}</option>)}
+                            </select>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
