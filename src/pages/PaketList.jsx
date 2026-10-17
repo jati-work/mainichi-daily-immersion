@@ -4,12 +4,34 @@ import ImportExcel from '../components/ImportExcel'
 
 // Kata Baru boleh berisi arti per kata: "聞=telinga、見=lihat" (= atau ＝ antara kata & arti).
 // Pemisah antar pasangan: koma Jepang (、) atau koma biasa. Data lama tanpa arti tetap valid.
+// Format lengkap per kata: "過ごす=menghabiskan waktu|過ごせます|可能形" -> kata=arti|bentuk di kalimat|jenis perubahan
 function parseKataBaru(s) {
   return String(s || '').split(/[,，、､]/).map(t => t.trim()).filter(Boolean).map(t => {
     const i = t.search(/[=＝]/)
-    return i === -1 ? { kata: t, arti: '' } : { kata: t.slice(0, i).trim(), arti: t.slice(i + 1).trim() }
+    if (i === -1) return { kata: t, arti: '', bentuk: '', jenis: '' }
+    const [arti = '', bentuk = '', jenis = ''] = t.slice(i + 1).split(/[|｜]/).map(x => x.trim())
+    return { kata: t.slice(0, i).trim(), arti, bentuk, jenis }
   }).filter(x => x.kata)
 }
+// daftar jenis perubahan kata (nilai = yang disimpan, label = yang kelihatan di dropdown)
+const JENIS_PERUBAHAN = [
+  { nilai: 'ます形', label: 'ます形 (sopan)' },
+  { nilai: 'て形', label: 'て形' },
+  { nilai: 'た形', label: 'た形 (lampau)' },
+  { nilai: 'ない形', label: 'ない形 (negatif)' },
+  { nilai: '可能形', label: '可能形 (potensial)' },
+  { nilai: '受身形', label: '受身形 (pasif)' },
+  { nilai: '使役形', label: '使役形 (kausatif)' },
+  { nilai: '命令形', label: '命令形 (imperatif)' },
+  { nilai: '意向形', label: '意向形 (ajakan)' },
+  { nilai: '条件形', label: '条件形 (kondisional)' },
+]
+
+// kunci pencocokan kata: buang romaji di ujung & tanda baca, biar "厳しい" = "厳しい (kibishii)"
+const kunciKata = s => String(s ?? '')
+  .replace(/\s*[（(](?=[^)）]*[a-zāīūēō])[A-Za-z\u00C0-\u024F\s.,'’\-!?]+[)）]\s*$/, '')
+  .trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
+const tanpaRomaji = s => String(s || '').replace(/\s*[（(][^)）]*[)）]\s*$/, '').trim()
 
 export default function PaketList({ goTo, openPaket }) {
   const [folders, setFolders] = useState([])
@@ -17,10 +39,12 @@ export default function PaketList({ goTo, openPaket }) {
   const [folderKiri, setFolderKiri] = useState(null)   // currentFolderId panel BUKU (null = root panel kiri)
   const [folderKanan, setFolderKanan] = useState(null) // currentFolderId panel HARIAN (null = root panel kanan)
   const [search, setSearch] = useState('')
+  const [jenisFilter, setJenisFilter] = useState('') // '' = semua kata, '*' = semua yang ada perubahannya, atau satu jenis
   const [loading, setLoading] = useState(true)
   const [exportLoading, setExportLoading] = useState(false)
   const [movePicker, setMovePicker] = useState(null) // { type: 'folder'|'paket', item }
   const [kamusHasil, setKamusHasil] = useState([])
+  const [kamusBuka, setKamusBuka] = useState(() => new Set()) // id kata yang daftar contohnya dibuka semua
   const [kamusLoading, setKamusLoading] = useState(false)
   const [tambahMenuSisi, setTambahMenuSisi] = useState(null) // 'kiri' | 'kanan' | null
   const [streak, setStreak] = useState(0)
@@ -95,45 +119,62 @@ export default function PaketList({ goTo, openPaket }) {
   // kalimat asal + artinya sebagai konteks di bawahnya.
   useEffect(() => {
     const term = search.trim()
-    if (!term) { setKamusHasil([]); setKamusLoading(false); return }
+    if (!term && !jenisFilter) { setKamusHasil([]); setKamusLoading(false); return }
     setKamusLoading(true)
     const timer = setTimeout(async () => {
-      // limit dilonggarin (200) karena kalimat Harian ikut ketarik query tapi nanti dibuang di bawah
-      const { data, error } = await supabase
+      // limit dilonggarin (200) karena banyak kalimat/kata ikut ketarik query tapi nanti dikelompokkan di bawah
+      let q = supabase
         .from('kata')
-        .select('id, jp, arti, kata_baru, paket:paket_id (id, nama, folder_id, kolom)')
-        .or(`jp.ilike.%${term}%,arti.ilike.%${term}%,kata_baru.ilike.%${term}%`)
-        .limit(200)
+        .select('id, jp, arti, kata_baru, contoh_kalimat, paket:paket_id (id, nama, folder_id, kolom)')
+      // dropdown jenis perubahan: di data, jenis nempel sebagai "|jenis" di akhir tiap kata
+      if (jenisFilter) q = q.ilike('kata_baru', jenisFilter === '*' ? '%|%' : `%|${jenisFilter}%`)
+      if (term) q = q.or(`jp.ilike.%${term}%,arti.ilike.%${term}%,kata_baru.ilike.%${term}%`)
+      const { data, error } = await q.limit(200)
       if (!error) {
         const termLower = term.toLowerCase()
-        const hasil = []
-        const kataHarian = new Map() // kata yang sama di paket yang sama cukup tampil sekali
+        // KAMUS: satu entri per kata (Buku + Harian digabung), isinya arti, bentuk-bentuk berubahnya,
+        // dan beberapa contoh kalimat dari Buku (kolom contoh) dan Harian (kalimat yang memuat kata itu)
+        const entri = new Map()
+        const ambilEntri = (kata, arti, paket) => {
+          const kunci = kunciKata(kata)
+          let e = entri.get(kunci)
+          if (!e) { e = { id: kunci, kata, arti: '', bentuk: [], contoh: [], paket }; entri.set(kunci, e) }
+          if (!e.arti && arti) e.arti = arti
+          if (!e.paket && paket) e.paket = paket
+          return e
+        }
+        const tambahContoh = (e, jp, arti, paket) => {
+          const kunci = kunciKata(jp)
+          if (!kunci || e.contoh.some(c => c.kunci === kunci)) return
+          e.contoh.push({ kunci, jp: tanpaRomaji(jp), arti: arti || '', paket })
+        }
         ;(data || []).forEach(row => {
           const sisi = row.paket ? sisiItem({ tipe: 'paket', data: row.paket }) : 'kiri'
           if (sisi === 'kanan') {
-            // HARIAN: yang dicari & ditampilin KATA-nya aja (kalimat nggak ikut muncul)
             parseKataBaru(row.kata_baru)
-              .filter(w => w.kata.toLowerCase().includes(termLower) || w.arti.toLowerCase().includes(termLower))
+              .filter(w => !jenisFilter || (jenisFilter === '*' ? (w.bentuk || w.jenis) : w.jenis === jenisFilter))
+              .filter(w => !term || [w.kata, w.arti, w.bentuk, w.jenis].some(x => x.toLowerCase().includes(termLower)))
               .forEach(w => {
-                const kunci = `${row.paket?.id}|${w.kata}`
-                const ada = kataHarian.get(kunci)
-                if (ada) { if (!ada.artiBadge && w.arti) ada.artiBadge = w.arti; return }
-                const item = { id: `${row.id}-${w.kata}`, tipe: 'badge', kataBadge: w.kata, artiBadge: w.arti, paket: row.paket }
-                kataHarian.set(kunci, item)
-                hasil.push(item)
+                const e = ambilEntri(w.kata, w.arti, row.paket)
+                if ((w.bentuk || w.jenis) && !e.bentuk.some(b => b.bentuk === w.bentuk && b.jenis === w.jenis)) e.bentuk.push({ bentuk: w.bentuk, jenis: w.jenis })
+                tambahContoh(e, row.jp, row.arti, row.paket)
               })
             return
           }
-          // BUKU: kata biasa (kanji/kana atau arti)
+          if (jenisFilter) return // jenis perubahan cuma ada di Harian
+          // BUKU: kata biasa (kanji/kana atau arti); contoh kalimatnya ikut jadi contoh
           const cocokNormal = row.jp?.toLowerCase().includes(termLower) || row.arti?.toLowerCase().includes(termLower)
-          if (cocokNormal) hasil.push({ id: row.id, tipe: 'normal', jp: row.jp, arti: row.arti, paket: row.paket })
+          if (cocokNormal) {
+            const e = ambilEntri(tanpaRomaji(row.jp), row.arti, row.paket)
+            if (row.contoh_kalimat) tambahContoh(e, row.contoh_kalimat, '', row.paket)
+          }
         })
-        setKamusHasil(hasil.slice(0, 50))
+        setKamusHasil([...entri.values()].slice(0, 50))
       }
       setKamusLoading(false)
     }, 300)
     return () => clearTimeout(timer)
-  }, [search])
+  }, [search, jenisFilter])
 
   // ---------- helper: struktur folder (sadar sisi kiri/kanan) ----------
   // di level ROOT (parentId null), kefilter sesuai kolom (kiri=buku, kanan=harian).
@@ -461,8 +502,9 @@ export default function PaketList({ goTo, openPaket }) {
   // ---------- kiri/kanan (ditentuin pas bikin folder/paket baru di panel yang sesuai) ----------
 
   const term = search.trim()
+  const sedangCari = !!term || !!jenisFilter
   const namaPaketDitemukan = useMemo(() => {
-    const set = new Set(kamusHasil.map(k => k.paket?.nama).filter(Boolean))
+    const set = new Set(kamusHasil.flatMap(k => [k.paket?.nama, ...k.contoh.map(c => c.paket?.nama)]).filter(Boolean))
     return [...set]
   }, [kamusHasil])
 
@@ -696,14 +738,25 @@ export default function PaketList({ goTo, openPaket }) {
           </div>
         </div>
 
-        <input
-          className="input-search" placeholder="🔍 Cari kata (kanji/kana atau artinya)..."
-          value={search} onChange={e => setSearch(e.target.value)}
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+          <input
+            className="input-search" placeholder="🔍 Cari kata (kanji/kana atau artinya)..."
+            value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 0 }}
+          />
+          <select
+            value={jenisFilter} onChange={e => setJenisFilter(e.target.value)}
+            title="Cari kata berdasarkan jenis perubahannya"
+            style={{ padding: '0 10px', borderRadius: 12, border: '1.5px solid #b8d8b8', background: '#fff', fontSize: 13, maxWidth: 190 }}
+          >
+            <option value="">Semua kata</option>
+            <option value="*">Ada perubahan (semua)</option>
+            {JENIS_PERUBAHAN.map(j => <option key={j.nilai} value={j.nilai}>{j.label}</option>)}
+          </select>
+        </div>
 
         {loading && <div style={{ textAlign: 'center', color: '#9abaa8', padding: 20 }}>Memuat...</div>}
 
-        {!loading && !term && (
+        {!loading && !sedangCari && (
           <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start' }} className="panel-dua-sisi">
             <PanelSisi
               sisi="kiri" label="📚 Buku" currentId={folderKiri} setCurrentId={setFolderKiri}
@@ -717,7 +770,7 @@ export default function PaketList({ goTo, openPaket }) {
           </div>
         )}
 
-        {!loading && term && (
+        {!loading && sedangCari && (
           <>
             {kamusLoading && <div style={{ textAlign: 'center', color: '#9abaa8', padding: 20 }}>Mencari...</div>}
 
@@ -731,36 +784,58 @@ export default function PaketList({ goTo, openPaket }) {
 
                 {kamusHasil.length === 0 && (
                   <div style={{ textAlign: 'center', color: '#9abaa8', fontSize: 12, padding: '20px 0' }}>
-                    Gak ketemu kata "{search}"
+                    {jenisFilter ? 'Belum ada kata dengan perubahan itu' : `Gak ketemu kata "${search}"`}
                   </div>
                 )}
 
-                {kamusHasil.map(k => (
-                  <div
-                    key={k.id} className="paket-row" style={{ cursor: k.paket ? 'pointer' : 'default' }}
-                    onClick={() => k.paket && openPaket(k.paket.id)}
-                  >
-                    <div className="info">
-                      {k.tipe === 'badge' ? (
-                        <>
-                          <div className="nama">
-                            <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.kataBadge}</span>
-                            {k.artiBadge && <span style={{ fontSize: 13, color: '#555' }}> — {k.artiBadge}</span>}
+                {kamusHasil.map(k => {
+                  const buka = kamusBuka.has(k.id)
+                  const tampil = buka ? k.contoh : k.contoh.slice(0, 3)
+                  return (
+                    <div
+                      key={k.id} className="paket-row" style={{ cursor: k.paket ? 'pointer' : 'default' }}
+                      onClick={() => k.paket && openPaket(k.paket.id)}
+                    >
+                      <div className="info">
+                        <div className="nama">
+                          <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.kata}</span>
+                          {k.arti && <span style={{ fontSize: 13, color: '#555' }}> — {k.arti}</span>}
+                        </div>
+                        {k.bentuk.length > 0 && (
+                          <div className="meta" style={{ display: 'block' }}>
+                            {k.bentuk.map((b, i) => (
+                              <span key={i} style={{ marginRight: 10 }}>
+                                <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 14 }}>{b.bentuk}</span>
+                                {b.jenis && <span style={{ marginLeft: 5, fontSize: 11, background: '#e8f3e8', borderRadius: 8, padding: '1px 7px' }}>{b.jenis}</span>}
+                              </span>
+                            ))}
                           </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="nama">
-                            <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.jp}</span>
+                        )}
+                        {tampil.map((c, i) => (
+                          <div
+                            key={i} className="meta" style={{ display: 'block', marginTop: 4 }}
+                            onClick={e => { e.stopPropagation(); c.paket && openPaket(c.paket.id) }}
+                          >
+                            <span>· </span>
+                            <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{c.jp}</span>
+                            {c.arti && <span> — {c.arti}</span>}
                           </div>
-                          <div className="meta">
-                            <span>{k.arti}</span>
+                        ))}
+                        {k.contoh.length > 3 && (
+                          <div
+                            style={{ fontSize: 11, color: '#7aaa8a', marginTop: 4, cursor: 'pointer' }}
+                            onClick={e => {
+                              e.stopPropagation()
+                              setKamusBuka(prev => { const n = new Set(prev); n.has(k.id) ? n.delete(k.id) : n.add(k.id); return n })
+                            }}
+                          >
+                            {buka ? 'Sembunyikan contoh' : `+${k.contoh.length - 3} contoh lagi`}
                           </div>
-                        </>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </>
             )}
           </>
