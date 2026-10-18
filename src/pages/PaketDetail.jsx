@@ -640,16 +640,15 @@ export default function PaketDetail({ paketId, goTo }) {
                     <div style={{ fontSize: 11, color: '#7a8a80', marginBottom: 4 }}>Arti tiap kata (opsional, ikut muncul di export hafalan). Kalau kata berubah bentuk di kalimat, isi bentuknya dan pilih jenisnya biar bisa dicari di kamus. Pakai Tab buat pindah.</div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
                       {[...new Set(pecahKataBaru(kataBaruInput))].map(w => (
-                        <div key={w} style={{ display: 'grid', gap: 4 }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 15, minWidth: 44 }}>{w}</span>
-                            <input tabIndex={3} placeholder="arti" value={artiKata[w] || ''}
-                              onChange={e => setArtiKata(prev => ({ ...prev, [w]: e.target.value.replace(/[,，、]/g, '/').replace(/[=＝|｜]/g, '') }))}
-                              onKeyDown={e => e.key === 'Enter' && simpanKata()}
-                              style={{ flex: 1, minWidth: 0, padding: 6, borderRadius: 8, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
-                          </label>
-                          <div style={{ display: 'flex', gap: 6, paddingLeft: 52 }}>
-                            <input tabIndex={3} placeholder="bentuk di kalimat (opsional)" value={ubahKata[w]?.bentuk || ''}
+                        <div key={w} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 8, rowGap: 4, alignItems: 'center' }}>
+                          <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 15, minWidth: 44 }}>{w}</span>
+                          <input tabIndex={3} placeholder="arti" value={artiKata[w] || ''}
+                            onChange={e => setArtiKata(prev => ({ ...prev, [w]: e.target.value.replace(/[,，、]/g, '/').replace(/[=＝|｜]/g, '') }))}
+                            onKeyDown={e => e.key === 'Enter' && simpanKata()}
+                            style={{ minWidth: 0, padding: 6, borderRadius: 8, border: '1.5px solid #b8d8b8', fontSize: 12 }} />
+                          <span />
+                          <div style={{ display: 'flex', gap: 6, minWidth: 0 }}>
+                            <input tabIndex={3} placeholder="bentuk di kalimat" value={ubahKata[w]?.bentuk || ''}
                               onChange={e => setUbahKata(prev => ({ ...prev, [w]: { ...prev[w], bentuk: e.target.value.replace(/[,，、=＝|｜]/g, '') } }))}
                               onKeyDown={e => e.key === 'Enter' && simpanKata()}
                               style={{ flex: 1, minWidth: 0, padding: 6, borderRadius: 8, border: '1.5px solid #b8d8b8', fontSize: 13, fontFamily: "'Noto Serif JP', serif" }} />
