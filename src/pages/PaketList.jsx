@@ -32,6 +32,20 @@ const kunciKata = s => String(s ?? '')
   .replace(/\s*[（(](?=[^)）]*[a-zāīūēō])[A-Za-z\u00C0-\u024F\s.,'’\-!?]+[)）]\s*$/, '')
   .trim().toLowerCase().replace(/[\s、。！？・「」]/g, '').normalize('NFKC')
 const tanpaRomaji = s => String(s || '').replace(/\s*[（(][^)）]*[)）]\s*$/, '').trim()
+function shuffle(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+// tebalkan bentuk yang ditebak di dalam kalimat contoh
+function sorotKalimat(kal, bentuk) {
+  const i = bentuk ? kal.indexOf(bentuk) : -1
+  if (i === -1) return kal
+  return <>{kal.slice(0, i)}<b style={{ color: '#2d6a4a' }}>{bentuk}</b>{kal.slice(i + bentuk.length)}</>
+}
 
 export default function PaketList({ goTo, openPaket }) {
   const [folders, setFolders] = useState([])
@@ -49,6 +63,7 @@ export default function PaketList({ goTo, openPaket }) {
   const [tambahMenuSisi, setTambahMenuSisi] = useState(null) // 'kiri' | 'kanan' | null
   const [streak, setStreak] = useState(0)
   const [aktifHariIni, setAktifHariIni] = useState(true)
+  const [tesUbah, setTesUbah] = useState(null) // null = tertutup, {loading} = memuat, selain itu = tes berjalan
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -501,6 +516,114 @@ export default function PaketList({ goTo, openPaket }) {
 
   // ---------- kiri/kanan (ditentuin pas bikin folder/paket baru di panel yang sesuai) ----------
 
+  // ----- tes perubahan kata: 過ごす + 可能形 (potensial) -> 過ごせます -----
+  async function mulaiTesUbah() {
+    setTesUbah({ loading: true })
+    const { data, error } = await supabase
+      .from('kata')
+      .select('id, jp, kata_baru, paket:paket_id (id, nama)')
+      .ilike('kata_baru', '%|%')
+      .limit(2000)
+    if (error) { alert('Gagal ambil soal: ' + error.message); setTesUbah(null); return }
+    const peta = new Map()
+    ;(data || []).forEach(row => {
+      parseKataBaru(row.kata_baru).filter(w => w.bentuk && w.jenis).forEach(w => {
+        const kunci = `${kunciKata(w.kata)}|${kunciKata(w.bentuk)}|${w.jenis}`
+        let e = peta.get(kunci)
+        if (!e) { e = { kunci, kata: w.kata, arti: w.arti, bentuk: w.bentuk, jenis: w.jenis, kalimat: [] }; peta.set(kunci, e) }
+        const kal = tanpaRomaji(row.jp)
+        if (kal && !e.kalimat.includes(kal)) e.kalimat.push(kal)
+      })
+    })
+    const items = shuffle([...peta.values()])
+    if (items.length === 0) {
+      alert('Belum ada kata yang diisi bentuk & jenis perubahannya. Isi dulu lewat form Edit Kata di paket Harian ya.')
+      setTesUbah(null)
+      return
+    }
+    setTesUbah({ items, idx: 0, input: '', answered: false, benar: false, skorBenar: 0, skorSalah: 0 })
+  }
+  function tesUbahCek() {
+    setTesUbah(t => {
+      if (!t || t.answered) return t
+      const val = t.input.trim()
+      if (!val) return t
+      const benar = kunciKata(val) === kunciKata(t.items[t.idx].bentuk)
+      return { ...t, answered: true, benar, skorBenar: t.skorBenar + (benar ? 1 : 0), skorSalah: t.skorSalah + (benar ? 0 : 1) }
+    })
+  }
+  function tesUbahLanjut() {
+    setTesUbah(t => ({ ...t, idx: t.idx + 1, input: '', answered: false, benar: false }))
+  }
+  function renderTesUbah() {
+    const t = tesUbah
+    if (!t) return null
+    if (t.loading) {
+      return (
+        <div className="modal-overlay open">
+          <div className="modal-box"><div style={{ textAlign: 'center', color: '#9abaa8', padding: 20 }}>Memuat soal...</div></div>
+        </div>
+      )
+    }
+    const selesai = t.idx >= t.items.length
+    const w = selesai ? null : t.items[t.idx]
+    const jenisLabel = w ? (JENIS_PERUBAHAN.find(j => j.nilai === w.jenis)?.label || w.jenis) : ''
+    return (
+      <div className="modal-overlay open">
+        <div className="modal-box" style={{ maxWidth: 480 }}>
+          {!selesai ? (
+            <>
+              <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{t.idx + 1} / {t.items.length} · ✓ {t.skorBenar} · ✗ {t.skorSalah}</div>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>Ubah ke bentuk:</div>
+              <div style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, fontWeight: 600, textAlign: 'center' }}>
+                {w.kata} <span style={{ color: '#9abaa8' }}>+</span> {jenisLabel}
+              </div>
+              {w.arti && <div style={{ textAlign: 'center', fontSize: 12, color: '#7a8a80', margin: '4px 0 14px' }}>{w.arti}</div>}
+              <input
+                key={t.idx} autoFocus value={t.input} readOnly={t.answered}
+                placeholder="ketik bentuknya…"
+                onChange={e => setTesUbah(x => ({ ...x, input: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && (t.answered ? tesUbahLanjut() : tesUbahCek())}
+                style={{
+                  textAlign: 'center', fontSize: 18, fontFamily: "'Noto Serif JP', serif", width: '100%', boxSizing: 'border-box',
+                  borderColor: t.answered ? (t.benar ? '#1e7d4f' : '#c0392b') : undefined,
+                }}
+              />
+              {t.answered && (
+                <div style={{ textAlign: 'center', fontSize: 13, margin: '10px 0 4px', fontWeight: 600, color: t.benar ? '#1e7d4f' : '#c0392b' }}>
+                  {t.benar ? '✓ Benar! 🎉' : <>✗ Jawaban: <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{w.bentuk}</span></>}
+                </div>
+              )}
+              {t.answered && w.kalimat.length > 0 && (
+                <div style={{ background: '#f0f7f0', borderRadius: 10, padding: '10px 12px', margin: '8px 0 4px', textAlign: 'left' }}>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#7aaa8a', marginBottom: 6 }}>Contoh kalimat</div>
+                  {w.kalimat.slice(0, 3).map((k, i) => (
+                    <div key={i} style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 14, lineHeight: 1.7, marginTop: i ? 6 : 0 }}>{sorotKalimat(k, w.bentuk)}</div>
+                  ))}
+                </div>
+              )}
+              <div className="modal-btns">
+                <button onClick={() => setTesUbah(null)}>Tutup</button>
+                <button className="confirm" onClick={t.answered ? tesUbahLanjut : tesUbahCek}>
+                  {t.answered ? (t.idx + 1 >= t.items.length ? 'Lihat Hasil' : 'Lanjut →') : 'Cek Jawaban'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 6 }}>{t.skorBenar / t.items.length >= 0.8 ? '🎉' : t.skorBenar / t.items.length >= 0.5 ? '💪' : '📚'}</div>
+              <div style={{ fontSize: 32, fontWeight: 700, textAlign: 'center', marginBottom: 14 }}>{t.skorBenar}/{t.items.length}</div>
+              <div className="modal-btns">
+                <button onClick={() => setTesUbah(null)}>Selesai</button>
+                <button className="confirm" onClick={mulaiTesUbah}>Ulangi</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const term = search.trim()
   const sedangCari = !!term || !!jenisFilter
   const namaPaketDitemukan = useMemo(() => {
@@ -702,11 +825,28 @@ export default function PaketList({ goTo, openPaket }) {
       <div className="cover-inner paket-list-wide">
         <div className="cover-head">
           <div className="cover-emoji">📚</div>
-          <div style={{ flex: 1 }}>
+          <div>
             <div className="cover-title" style={{ fontSize: 22 }}>Kosakata Immersion</div>
             <div className="cover-sub">kosakata dari keseharian</div>
           </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+            <button
+              className="icon-btn" title="Download PDF (buat dibaca)" onClick={exportSemuaHafalan}
+              disabled={exportLoading}
+              style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
+            >
+              {exportLoading ? '⏳' : 'PDF'}
+            </button>
+            <button
+              className="icon-btn" title="Download TXT (buat dikasih ke AI)" onClick={exportTxtHafalan}
+              style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
+            >
+              MD
+            </button>
+          </div>
+          <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button className="act-btn" onClick={mulaiTesUbah} title="Latihan menebak perubahan bentuk kata">📝 Tes Perubahan Kata</button>
             {streak > 0 && (
               <div
                 title={aktifHariIni
@@ -722,31 +862,18 @@ export default function PaketList({ goTo, openPaket }) {
                 <span style={{ filter: aktifHariIni ? 'none' : 'grayscale(100%)' }}>🔥</span> {streak} hari
               </div>
             )}
-            <button
-              className="icon-btn" title="Download PDF (buat dibaca)" onClick={exportSemuaHafalan}
-              disabled={exportLoading}
-              style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
-            >
-              {exportLoading ? '⏳' : 'PDF'}
-            </button>
-            <button
-              className="icon-btn" title="Download TXT (buat dikasih ke AI)" onClick={exportTxtHafalan}
-              style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
-            >
-              MD
-            </button>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginBottom: 18 }}>
           <input
             className="input-search" placeholder="🔍 Cari kata (kanji/kana atau artinya)..."
-            value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 0 }}
+            value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 0, margin: 0 }}
           />
           <select
             value={jenisFilter} onChange={e => setJenisFilter(e.target.value)}
             title="Cari kata berdasarkan jenis perubahannya"
-            style={{ padding: '0 10px', borderRadius: 12, border: '1.5px solid #b8d8b8', background: '#fff', fontSize: 13, maxWidth: 190 }}
+            style={{ margin: 0, padding: '0 10px', borderRadius: 12, border: '1.5px solid #b8d8b8', background: '#fff', fontSize: 13, fontFamily: 'inherit', width: 165, flexShrink: 0, outline: 'none' }}
           >
             <option value="">Semua kata</option>
             <option value="*">Ada perubahan (semua)</option>
@@ -848,6 +975,7 @@ export default function PaketList({ goTo, openPaket }) {
         )}
       </div>
       <MovePickerModal />
+      {renderTesUbah()}
     </div>
   )
 }
