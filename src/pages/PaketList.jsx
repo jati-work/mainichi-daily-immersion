@@ -525,14 +525,20 @@ export default function PaketList({ goTo, openPaket }) {
       .ilike('kata_baru', '%|%')
       .limit(2000)
     if (error) { alert('Gagal ambil soal: ' + error.message); setTesUbah(null); return }
+    // satu soal = satu kata + satu jenis. Semua bentuk yang pernah dicatat untuk kombinasi itu
+    // (misal 過ごせます dan 過ごせません sama-sama 可能形) jadi "varian" yang sama-sama dianggap benar.
     const peta = new Map()
     ;(data || []).forEach(row => {
       parseKataBaru(row.kata_baru).filter(w => w.bentuk && w.jenis).forEach(w => {
-        const kunci = `${kunciKata(w.kata)}|${kunciKata(w.bentuk)}|${w.jenis}`
+        const kunci = `${kunciKata(w.kata)}|${w.jenis}`
         let e = peta.get(kunci)
-        if (!e) { e = { kunci, kata: w.kata, arti: w.arti, bentuk: w.bentuk, jenis: w.jenis, kalimat: [] }; peta.set(kunci, e) }
+        if (!e) { e = { kunci, kata: w.kata, arti: w.arti, jenis: w.jenis, varian: [] }; peta.set(kunci, e) }
+        if (!e.arti && w.arti) e.arti = w.arti
+        const kb = kunciKata(w.bentuk)
+        let v = e.varian.find(x => x.kunci === kb)
+        if (!v) { v = { kunci: kb, bentuk: w.bentuk, kalimat: [] }; e.varian.push(v) }
         const kal = tanpaRomaji(row.jp)
-        if (kal && !e.kalimat.includes(kal)) e.kalimat.push(kal)
+        if (kal && !v.kalimat.includes(kal)) v.kalimat.push(kal)
       })
     })
     const semua = [...peta.values()]
@@ -554,7 +560,7 @@ export default function PaketList({ goTo, openPaket }) {
       if (!t || t.answered) return t
       const val = t.input.trim()
       if (!val) return t
-      const benar = kunciKata(val) === kunciKata(t.items[t.idx].bentuk)
+      const benar = t.items[t.idx].varian.some(v => v.kunci === kunciKata(val))
       return { ...t, answered: true, benar, skorBenar: t.skorBenar + (benar ? 1 : 0), skorSalah: t.skorSalah + (benar ? 0 : 1) }
     })
   }
@@ -600,6 +606,9 @@ export default function PaketList({ goTo, openPaket }) {
     const selesai = t.idx >= t.items.length
     const w = selesai ? null : t.items[t.idx]
     const jenisLabel = w ? (JENIS_PERUBAHAN.find(j => j.nilai === w.jenis)?.label || w.jenis) : ''
+    // semua kalimat dari semua varian, tanpa duplikat; tiap kalimat menebalkan bentuk yang cocok
+    const semuaKalimat = []
+    if (w) w.varian.forEach(v => v.kalimat.forEach(k => { if (!semuaKalimat.some(x => x.kal === k)) semuaKalimat.push({ kal: k, bentuk: v.bentuk }) }))
     const labelMode = t.jenis === '*' ? 'acak' : (JENIS_PERUBAHAN.find(j => j.nilai === t.jenis)?.label || t.jenis)
     return (
       <div className="modal-overlay open">
@@ -624,14 +633,21 @@ export default function PaketList({ goTo, openPaket }) {
               />
               {t.answered && (
                 <div style={{ textAlign: 'center', fontSize: 13, margin: '10px 0 4px', fontWeight: 600, color: t.benar ? '#1e7d4f' : '#c0392b' }}>
-                  {t.benar ? '✓ Benar! 🎉' : <>✗ Jawaban: <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{w.bentuk}</span></>}
+                  {t.benar
+                    ? '✓ Benar! 🎉'
+                    : <>✗ Jawaban: <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{w.varian.map(v => v.bentuk).join(' / ')}</span></>}
                 </div>
               )}
-              {t.answered && w.kalimat.length > 0 && (
-                <div style={{ background: '#f0f7f0', borderRadius: 10, padding: '10px 12px', margin: '8px 0 4px', textAlign: 'left' }}>
+              {t.answered && w.varian.length > 1 && (
+                <div style={{ textAlign: 'center', fontSize: 12, color: '#7a8a80', marginBottom: 4 }}>
+                  {w.varian.length} bentuk tercatat: <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{w.varian.map(v => v.bentuk).join(' · ')}</span>
+                </div>
+              )}
+              {t.answered && semuaKalimat.length > 0 && (
+                <div style={{ background: '#f0f7f0', borderRadius: 10, padding: '10px 12px', margin: '8px 0 4px', textAlign: 'left', maxHeight: 220, overflowY: 'auto' }}>
                   <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#7aaa8a', marginBottom: 6 }}>Contoh kalimat</div>
-                  {w.kalimat.slice(0, 3).map((k, i) => (
-                    <div key={i} style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 14, lineHeight: 1.7, marginTop: i ? 6 : 0 }}>{sorotKalimat(k, w.bentuk)}</div>
+                  {semuaKalimat.map((x, i) => (
+                    <div key={i} style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 14, lineHeight: 1.7, marginTop: i ? 6 : 0 }}>{sorotKalimat(x.kal, x.bentuk)}</div>
                   ))}
                 </div>
               )}
@@ -883,7 +899,7 @@ export default function PaketList({ goTo, openPaket }) {
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <button
               className="act-btn" onClick={mulaiTesUbah} title="Latihan menebak perubahan bentuk kata"
-              style={{ width: 165, height: 38, borderRadius: 12, border: '1.5px solid #b8d8b8', background: '#fff', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: 0, boxSizing: 'border-box' }}
+              style={{ width: 165, height: 38, borderRadius: 12, padding: '0 6px', margin: 0, boxSizing: 'border-box', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
             >📝 Tes Perubahan Kata</button>
             {streak > 0 && (
               <div
