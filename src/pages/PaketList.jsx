@@ -516,7 +516,7 @@ export default function PaketList({ goTo, openPaket }) {
 
   // ---------- kiri/kanan (ditentuin pas bikin folder/paket baru di panel yang sesuai) ----------
 
-  // ----- tes perubahan kata: 過ごす + 可能形 (potensial) -> 過ごせます -----
+  // ----- tes perubahan kata: pilih mode dulu (acak / satu jenis), latihan santai (tidak mengubah status hafal) -----
   async function mulaiTesUbah() {
     setTesUbah({ loading: true })
     const { data, error } = await supabase
@@ -535,13 +535,19 @@ export default function PaketList({ goTo, openPaket }) {
         if (kal && !e.kalimat.includes(kal)) e.kalimat.push(kal)
       })
     })
-    const items = shuffle([...peta.values()])
-    if (items.length === 0) {
+    const semua = [...peta.values()]
+    if (semua.length === 0) {
       alert('Belum ada kata yang diisi bentuk & jenis perubahannya. Isi dulu lewat form Edit Kata di paket Harian ya.')
       setTesUbah(null)
       return
     }
-    setTesUbah({ items, idx: 0, input: '', answered: false, benar: false, skorBenar: 0, skorSalah: 0 })
+    setTesUbah({ pilih: true, semua })
+  }
+  // jenis '*' = acak dari semua jenis; selain itu = satu jenis saja (misal 可能形)
+  function mulaiLatihanUbah(semua, jenis) {
+    const items = shuffle(jenis === '*' ? semua : semua.filter(x => x.jenis === jenis))
+    if (items.length === 0) return
+    setTesUbah({ semua, jenis, items, idx: 0, input: '', answered: false, benar: false, skorBenar: 0, skorSalah: 0 })
   }
   function tesUbahCek() {
     setTesUbah(t => {
@@ -565,15 +571,42 @@ export default function PaketList({ goTo, openPaket }) {
         </div>
       )
     }
+    if (t.pilih) {
+      const hitung = {}
+      t.semua.forEach(x => { hitung[x.jenis] = (hitung[x.jenis] || 0) + 1 })
+      const daftarJenis = JENIS_PERUBAHAN.filter(j => hitung[j.nilai])
+      return (
+        <div className="modal-overlay open">
+          <div className="modal-box" style={{ maxWidth: 380 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, textAlign: 'center', marginBottom: 4 }}>Mau latihan apa?</div>
+            <div style={{ fontSize: 11, color: '#9abaa8', textAlign: 'center', marginBottom: 12 }}>Latihan santai, tidak mengubah status hafal.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => mulaiLatihanUbah(t.semua, '*')}>
+                🔀 Acak semua jenis · {t.semua.length} soal
+              </button>
+              {daftarJenis.map(j => (
+                <button key={j.nilai} className="act-btn" style={{ textAlign: 'left' }} onClick={() => mulaiLatihanUbah(t.semua, j.nilai)}>
+                  {j.label} · {hitung[j.nilai]} soal
+                </button>
+              ))}
+            </div>
+            <div className="modal-btns" style={{ marginTop: 12 }}>
+              <button onClick={() => setTesUbah(null)}>Tutup</button>
+            </div>
+          </div>
+        </div>
+      )
+    }
     const selesai = t.idx >= t.items.length
     const w = selesai ? null : t.items[t.idx]
     const jenisLabel = w ? (JENIS_PERUBAHAN.find(j => j.nilai === w.jenis)?.label || w.jenis) : ''
+    const labelMode = t.jenis === '*' ? 'acak' : (JENIS_PERUBAHAN.find(j => j.nilai === t.jenis)?.label || t.jenis)
     return (
       <div className="modal-overlay open">
         <div className="modal-box" style={{ maxWidth: 480 }}>
           {!selesai ? (
             <>
-              <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{t.idx + 1} / {t.items.length} · ✓ {t.skorBenar} · ✗ {t.skorSalah}</div>
+              <div style={{ fontSize: 11, color: '#9abaa8', marginBottom: 6 }}>{t.idx + 1} / {t.items.length} · ✓ {t.skorBenar} · ✗ {t.skorSalah} · {labelMode}</div>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#9abaa8', marginBottom: 4 }}>Ubah ke bentuk:</div>
               <div style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, fontWeight: 600, textAlign: 'center' }}>
                 {w.kata} <span style={{ color: '#9abaa8' }}>+</span> {jenisLabel}
@@ -612,10 +645,12 @@ export default function PaketList({ goTo, openPaket }) {
           ) : (
             <>
               <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 6 }}>{t.skorBenar / t.items.length >= 0.8 ? '🎉' : t.skorBenar / t.items.length >= 0.5 ? '💪' : '📚'}</div>
-              <div style={{ fontSize: 32, fontWeight: 700, textAlign: 'center', marginBottom: 14 }}>{t.skorBenar}/{t.items.length}</div>
+              <div style={{ fontSize: 32, fontWeight: 700, textAlign: 'center', marginBottom: 4 }}>{t.skorBenar}/{t.items.length}</div>
+              <div style={{ fontSize: 12, color: '#9abaa8', textAlign: 'center', marginBottom: 14 }}>{labelMode}</div>
               <div className="modal-btns">
                 <button onClick={() => setTesUbah(null)}>Selesai</button>
-                <button className="confirm" onClick={mulaiTesUbah}>Ulangi</button>
+                <button onClick={() => setTesUbah({ pilih: true, semua: t.semua })}>Ganti mode</button>
+                <button className="confirm" onClick={() => mulaiLatihanUbah(t.semua, t.jenis)}>Ulangi</button>
               </div>
             </>
           )}
@@ -846,7 +881,10 @@ export default function PaketList({ goTo, openPaket }) {
           </div>
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button className="act-btn" onClick={mulaiTesUbah} title="Latihan menebak perubahan bentuk kata">📝 Tes Perubahan Kata</button>
+            <button
+              className="act-btn" onClick={mulaiTesUbah} title="Latihan menebak perubahan bentuk kata"
+              style={{ width: 165, height: 38, borderRadius: 12, border: '1.5px solid #b8d8b8', background: '#fff', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: 0, boxSizing: 'border-box' }}
+            >📝 Tes Perubahan Kata</button>
             {streak > 0 && (
               <div
                 title={aktifHariIni
