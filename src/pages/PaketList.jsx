@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseStorage } from '../supabaseClient'
 import ImportExcel from '../components/ImportExcel'
 import { fetchAll } from '../lib/fetchAll'
@@ -74,27 +73,6 @@ export default function PaketList({ goTo, openPaket }) {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  // Tombol ← ke cover dibikin fixed (nggak ikut ke-scroll) dan tepi kanannya disejajarkan dengan
-  // tepi kanan konten (baris pencarian), jadi lurus dengan kotak Tes Perubahan Kata & kotak di bawahnya.
-  const barisCariRef = useRef(null)
-  const [fabKanan, setFabKanan] = useState(null)
-  useLayoutEffect(() => {
-    const ukur = () => {
-      const el = barisCariRef.current
-      if (!el) return
-      setFabKanan(Math.max(0, document.documentElement.clientWidth - el.getBoundingClientRect().right))
-    }
-    ukur()
-    window.addEventListener('resize', ukur)
-    let ro = null
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(ukur)
-      if (barisCariRef.current) ro.observe(barisCariRef.current)
-      ro.observe(document.documentElement) // scrollbar muncul/hilang menggeser konten
-    }
-    return () => { window.removeEventListener('resize', ukur); ro?.disconnect() }
   }, [])
 
   async function muatData() {
@@ -261,8 +239,9 @@ export default function PaketList({ goTo, openPaket }) {
   }
 
   // ---------- export hafalan ke Excel ----------
-  // Isi: kata yang udah HAFAL, dikelompokkan per paket (nama paket di-stabilo biar ketauan batasnya).
-  // Tag Bunpou nggak ikut di grup paket; semuanya dikumpulin di satu bagian di paling bawah.
+  // Isi: kata yang udah HAFAL, dibagi 3 laman: hafal dari Buku, hafal dari Harian Immersion, dan Bunpou.
+  // Di laman Buku/Harian kata dikelompokkan per paket (nama paket di-stabilo biar ketauan batasnya).
+  // Tag Bunpou nggak ikut di grup paket; semuanya dikumpulin di laman Bunpou.
   const adalahBunpou = jp => /^bunpou\s*[:：]/i.test(String(jp || '').trim())
 
   // ubah hasil query kata (hafal=true) jadi list item siap-export.
@@ -272,7 +251,7 @@ export default function PaketList({ goTo, openPaket }) {
     const hasil = []
     data.forEach(row => {
       const sisi = sisiItem({ tipe: 'paket', data: { folder_id: row.paket?.folder_id ?? null, kolom: row.paket?.kolom } })
-      const info = { nama: row.paket?.nama, urutan: row.paket?.urutan, paketId: row.paket?.id }
+      const info = { nama: row.paket?.nama, urutan: row.paket?.urutan, paketId: row.paket?.id, sisi }
       if (sisi === 'kanan') {
         if (!row.kata_baru) return
         parseKataBaru(row.kata_baru).forEach(w => hasil.push({ jp: w.kata, arti: w.arti, ...info }))
@@ -297,40 +276,35 @@ export default function PaketList({ goTo, openPaket }) {
       const items = flattenExportItems([...(data || [])].sort((a, b) => urutanEfektif(a) - urutanEfektif(b)))
       if (items.length === 0) { alert('Belum ada kata yang hafal nih!'); return }
 
-      const biasa = items.filter(it => !adalahBunpou(it.jp))
-      // Bunpou dari semua paket: yang persis sama (tulisan + arti) cuma ditampilkan sekali
+      // 3 laman: hafal dari Buku, hafal dari Harian Immersion, dan Bunpou (dari semua paket, dua sisi)
+      const bukan = it => !adalahBunpou(it.jp)
+      const itemsBuku = items.filter(it => it.sisi === 'kiri' && bukan(it))
+      const itemsHarian = items.filter(it => it.sisi === 'kanan' && bukan(it))
+      // Bunpou: yang persis sama (tulisan + arti) cuma ditampilkan sekali
       const bunpou = []
       const sudah = new Set()
-      items.filter(it => adalahBunpou(it.jp)).forEach(it => {
+      // urut sesuai urutan paket (sort stabil, jadi urutan kata di dalam paket tetap)
+      items.filter(it => adalahBunpou(it.jp)).sort((a, b) => (a.urutan ?? 0) - (b.urutan ?? 0)).forEach(it => {
         const kunci = kunciKata(it.jp) + '|' + String(it.arti || '').trim().toLowerCase()
         if (!sudah.has(kunci)) { sudah.add(kunci); bunpou.push(it) }
       })
-      const peta = new Map()
-      biasa.forEach(it => {
-        const id = it.paketId ?? it.nama ?? 'tanpa-paket'
-        if (!peta.has(id)) peta.set(id, { nama: it.nama || 'Tanpa paket', urutan: it.urutan ?? 0, items: [] })
-        peta.get(id).items.push(it)
-      })
-      const pakets = [...peta.values()].sort((a, b) => a.urutan - b.urutan)
+      // kelompokkan per paket, urut sesuai urutan paket
+      const perPaket = list => {
+        const peta = new Map()
+        list.forEach(it => {
+          const id = it.paketId ?? it.nama ?? 'tanpa-paket'
+          if (!peta.has(id)) peta.set(id, { nama: it.nama || 'Tanpa paket', urutan: it.urutan ?? 0, items: [] })
+          peta.get(id).items.push(it)
+        })
+        return [...peta.values()].sort((a, b) => a.urutan - b.urutan)
+      }
 
       const ExcelJS = await loadExcelJS()
       const wb = new ExcelJS.Workbook()
-      const ws = wb.addWorksheet('Hafalan')
-      ws.columns = [{ width: 42 }, { width: 52 }]
       const tgl = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 
-      ws.addRow(['Kosakata Immersion — Daftar Hafalan'])
-      ws.mergeCells('A1:B1')
-      ws.getCell('A1').font = { bold: true, size: 15, color: { argb: 'FF2D6A4A' } }
-      ws.addRow([`Diekspor: ${tgl} · ${biasa.length} kata${bunpou.length ? ` · ${bunpou.length} bunpou` : ''}`])
-      ws.mergeCells('A2:B2')
-      ws.getCell('A2').font = { size: 10, color: { argb: 'FF7AAA8A' } }
-      const kepala = ws.addRow(['JP', 'Arti'])
-      kepala.eachCell(c => { c.font = { bold: true, color: { argb: 'FF2D6A4A' } }; c.border = { bottom: { style: 'medium', color: { argb: 'FF2D6A4A' } } } })
-      ws.views = [{ state: 'frozen', ySplit: 3 }]
-
       // baris judul yang di-stabilo (nama paket / "Bunpou")
-      const barisJudul = (teks, warna) => {
+      const barisJudul = (ws, teks, warna) => {
         ws.addRow([])
         const r = ws.addRow([teks, ''])
         ws.mergeCells(`A${r.number}:B${r.number}`)
@@ -339,7 +313,7 @@ export default function PaketList({ goTo, openPaket }) {
         r.getCell(1).alignment = { vertical: 'middle' }
         r.height = 24
       }
-      const barisItem = it => {
+      const barisItem = (ws, it) => {
         const r = ws.addRow([it.jp, it.arti || ''])
         r.getCell(1).font = { name: 'MS Mincho', size: 13 }
         ;[1, 2].forEach(i => {
@@ -347,9 +321,35 @@ export default function PaketList({ goTo, openPaket }) {
           r.getCell(i).border = { bottom: { style: 'hair', color: { argb: 'FFBBBBBB' } } }
         })
       }
+      // satu laman: judul + ringkasan + header JP/Arti (dibekukan), lalu isinya
+      const buatLaman = (namaLaman, judul, ringkas, isi, kosongTeks) => {
+        const ws = wb.addWorksheet(namaLaman)
+        ws.columns = [{ width: 42 }, { width: 52 }]
+        ws.addRow([judul])
+        ws.mergeCells('A1:B1')
+        ws.getCell('A1').font = { bold: true, size: 15, color: { argb: 'FF2D6A4A' } }
+        ws.addRow([`Diekspor: ${tgl} · ${ringkas}`])
+        ws.mergeCells('A2:B2')
+        ws.getCell('A2').font = { size: 10, color: { argb: 'FF7AAA8A' } }
+        const kepala = ws.addRow(['JP', 'Arti'])
+        kepala.eachCell(c => { c.font = { bold: true, color: { argb: 'FF2D6A4A' } }; c.border = { bottom: { style: 'medium', color: { argb: 'FF2D6A4A' } } } })
+        ws.views = [{ state: 'frozen', ySplit: 3 }]
+        if (isi.length === 0) {
+          ws.addRow([])
+          const r = ws.addRow([kosongTeks])
+          ws.mergeCells(`A${r.number}:B${r.number}`)
+          r.getCell(1).font = { italic: true, color: { argb: 'FF999999' } }
+          return
+        }
+        isi.forEach(p => {
+          if (p.items) { barisJudul(ws, p.nama, 'FFC6EDB8'); p.items.forEach(it => barisItem(ws, it)) } // stabilo hijau per paket
+          else { barisJudul(ws, 'Bunpou (dikumpulin dari semua paket)', 'FFFFC2E0'); p.semua.forEach(it => barisItem(ws, it)) } // stabilo pink
+        })
+      }
 
-      pakets.forEach(p => { barisJudul(p.nama, 'FFC6EDB8'); p.items.forEach(barisItem) }) // stabilo hijau
-      if (bunpou.length > 0) { barisJudul('Bunpou (dikumpulin dari semua paket)', 'FFFFC2E0'); bunpou.forEach(barisItem) } // stabilo pink
+      buatLaman('Hafal Buku', 'Kotoba Immersion — Hafalan dari Buku', `${itemsBuku.length} kata`, perPaket(itemsBuku), 'Belum ada kata hafal dari Buku.')
+      buatLaman('Hafal Harian Immersion', 'Kotoba Immersion — Hafalan dari Harian Immersion', `${itemsHarian.length} kata`, perPaket(itemsHarian), 'Belum ada kata hafal dari Harian Immersion.')
+      buatLaman('Bunpou', 'Kotoba Immersion — Bunpou', `${bunpou.length} bunpou`, bunpou.length ? [{ semua: bunpou }] : [], 'Belum ada bunpou dari kata yang sudah hafal.')
 
       const buf = await wb.xlsx.writeBuffer()
       const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
@@ -869,19 +869,17 @@ export default function PaketList({ goTo, openPaket }) {
 
   return (
     <div className="cover" style={{ justifyContent: 'flex-start', paddingTop: 60 }}>
-      {/* lewat portal ke <body> supaya benar-benar fixed (nggak ikut ke-scroll walau ada parent ber-transform) */}
-      {createPortal(
-        <button
-          className="back-fab" onClick={() => goTo('cover')}
-          style={{ position: 'fixed', left: 'auto', ...(fabKanan !== null ? { right: fabKanan } : {}) }}
-        >←</button>,
-        document.body
-      )}
       <div className="cover-inner paket-list-wide">
-        <div className="cover-head">
+        <div className="cover-head" style={{ position: 'relative' }}>
+          {/* Tombol ← ke cover: ikut ke-scroll bareng halaman (nggak melayang), nempel di pojok kanan atas
+              dengan tepi kanan lurus dengan kotak Tes Perubahan Kata & kotak-kotak di bawahnya */}
+          <button
+            className="back-fab" onClick={() => goTo('cover')}
+            style={{ position: 'absolute', top: 'auto', left: 'auto', right: 0, bottom: 'calc(100% + 18px)' }}
+          >←</button>
           <div className="cover-emoji">📚</div>
           <div>
-            <div className="cover-title" style={{ fontSize: 22 }}>Kosakata Immersion</div>
+            <div className="cover-title" style={{ fontSize: 22 }}>Kotoba Immersion</div>
             <div className="cover-sub">kosakata dari keseharian</div>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
@@ -917,7 +915,7 @@ export default function PaketList({ goTo, openPaket }) {
           </div>
         </div>
 
-        <div ref={barisCariRef} style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginBottom: 18 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginBottom: 18 }}>
           <input
             className="input-search" placeholder="🔍 Cari kata (kanji/kana atau artinya)..."
             value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 0, margin: 0 }}
