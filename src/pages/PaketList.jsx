@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase, supabaseStorage } from '../supabaseClient'
 import ImportExcel from '../components/ImportExcel'
+import { fetchAll } from '../lib/fetchAll'
+import { loadExcelJS } from '../lib/excelLoaders'
 
 // Kata Baru boleh berisi arti per kata: "聞=telinga、見=lihat" (= atau ＝ antara kata & arti).
 // Pemisah antar pasangan: koma Jepang (、) atau koma biasa. Data lama tanpa arti tetap valid.
@@ -73,16 +76,37 @@ export default function PaketList({ goTo, openPaket }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Tombol ← ke cover dibikin fixed (nggak ikut ke-scroll) dan tepi kanannya disejajarkan dengan
+  // tepi kanan konten (baris pencarian), jadi lurus dengan kotak Tes Perubahan Kata & kotak di bawahnya.
+  const barisCariRef = useRef(null)
+  const [fabKanan, setFabKanan] = useState(null)
+  useLayoutEffect(() => {
+    const ukur = () => {
+      const el = barisCariRef.current
+      if (!el) return
+      setFabKanan(Math.max(0, document.documentElement.clientWidth - el.getBoundingClientRect().right))
+    }
+    ukur()
+    window.addEventListener('resize', ukur)
+    let ro = null
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(ukur)
+      if (barisCariRef.current) ro.observe(barisCariRef.current)
+      ro.observe(document.documentElement) // scrollbar muncul/hilang menggeser konten
+    }
+    return () => { window.removeEventListener('resize', ukur); ro?.disconnect() }
+  }, [])
+
   async function muatData() {
     setLoading(true)
     const [{ data: fData, error: fErr }, { data: pData, error: pErr }, { data: hafalData }, { data: aktivitasData }] = await Promise.all([
-      supabase.from('folders').select('id, nama, parent_id, urutan, kolom').order('urutan', { ascending: true }),
-      supabase
+      fetchAll(() => supabase.from('folders').select('id, nama, parent_id, urutan, kolom').order('urutan', { ascending: true }).order('id')),
+      fetchAll(() => supabase
         .from('paket')
         .select('id, nama, folder_id, urutan_dalam_grup, pdf_path, kolom, kata(count), diary_pages(isi_teks)')
-        .order('urutan_dalam_grup', { ascending: true }),
-      supabase.from('kata').select('paket_id').eq('hafal', true),
-      supabase.from('aktivitas_harian').select('tanggal'),
+        .order('urutan_dalam_grup', { ascending: true }).order('id')),
+      fetchAll(() => supabase.from('kata').select('paket_id').eq('hafal', true).order('id')),
+      fetchAll(() => supabase.from('aktivitas_harian').select('tanggal').order('tanggal')),
     ])
     if (!fErr && fData) setFolders(fData)
     if (!pErr && pData) {
@@ -236,140 +260,110 @@ export default function PaketList({ goTo, openPaket }) {
     return hasil
   }
 
-  async function loadScript(src) {
-    if (document.querySelector(`script[src="${src}"]`)) return
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script')
-      s.src = src
-      s.onload = resolve
-      s.onerror = reject
-      document.body.appendChild(s)
-    })
-  }
-
-  async function exportSemuaHafalan() {
-    setExportLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('kata')
-        .select('jp, arti, kata_baru, paket:paket_id (nama, urutan, folder_id, kolom)')
-        .eq('hafal', true)
-      if (error) throw error
-      const items = data ? flattenExportItems(data) : []
-      if (items.length === 0) { alert('Belum ada kata yang hafal nih!'); setExportLoading(false); return }
-
-      const byPaket = {}
-      items.forEach(row => {
-        const nama = row.nama || 'Tanpa paket'
-        const urutan = row.urutan ?? 0
-        if (!byPaket[nama]) byPaket[nama] = { urutan, items: [] }
-        byPaket[nama].items.push(row)
-      })
-      const pakets = Object.entries(byPaket).sort((a, b) => a[1].urutan - b[1].urutan)
-
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')
-
-      const wrap = document.createElement('div')
-      wrap.style.cssText = 'position:fixed; left:-9999px; top:0; width:700px; background:#fff; padding:32px; font-family: "DM Sans", sans-serif; color:#1a1a1a;'
-      let html = `<div style="font-family:'Noto Serif JP', serif; font-size:20px; font-weight:700; color:#2d6a4a; margin-bottom:2px;">Kosakata Immersion — Daftar Hafalan</div>
-        <div style="font-size:11px; color:#7aaa8a; margin-bottom:20px;">Diekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${items.length} kata</div>`
-      pakets.forEach(([nama, { items }]) => {
-        html += `<div style="font-size:13px; font-weight:700; color:#1a1a1a; margin-top:18px; margin-bottom:8px; border-bottom:1.5px solid #b8d8b8; padding-bottom:4px;">${nama}</div>`
-        items.forEach(it => {
-          html += `<div style="display:grid; grid-template-columns:320px 1fr; gap:0; align-items:baseline; font-size:12px; padding:10px 4px; border-bottom:1px solid #e5e5e5;">
-            <div style="font-family:'Noto Serif JP', serif; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${it.jp}</div>
-            <div style="color:#444;">${it.arti}</div>
-          </div>`
-        })
-      })
-      wrap.innerHTML = html
-      document.body.appendChild(wrap)
-
-      const canvas = await window.html2canvas(wrap, { scale: 2, backgroundColor: '#ffffff' })
-      document.body.removeChild(wrap)
-
-      const { jsPDF } = window.jspdf
-      const pdf = new jsPDF('p', 'pt', 'a4')
-      const pageWidth = pdf.internal.pageSize.getWidth()
-      const pageHeight = pdf.internal.pageSize.getHeight()
-      const imgWidth = pageWidth
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      let heightLeft = imgHeight
-      let position = 0
-      const imgData = canvas.toDataURL('image/png')
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-      heightLeft -= pageHeight
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight
-        pdf.addPage()
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-        heightLeft -= pageHeight
-      }
-
-      pdf.save(`kosakata-hafalan-${new Date().toISOString().slice(0, 10)}.pdf`)
-    } catch (e) {
-      alert('Gagal bikin PDF: ' + e.message)
-    }
-    setExportLoading(false)
-  }
+  // ---------- export hafalan ke Excel ----------
+  // Isi: kata yang udah HAFAL, dikelompokkan per paket (nama paket di-stabilo biar ketauan batasnya).
+  // Tag Bunpou nggak ikut di grup paket; semuanya dikumpulin di satu bagian di paling bawah.
+  const adalahBunpou = jp => /^bunpou\s*[:：]/i.test(String(jp || '').trim())
 
   // ubah hasil query kata (hafal=true) jadi list item siap-export.
-  // Buku: 1 baris = 1 kata (jp+arti) kayak biasa.
-  // Harian: 1 baris kalimat bisa jadi BEBERAPA item (1 per kata di
-  // kata_baru), tanpa arti (soalnya artinya nempel di kalimat, bukan per
-  // kata). Kalimat tanpa kata_baru (grammar-only) di-skip, nggak nyumbang
-  // apa-apa ke daftar kata.
+  // Buku: 1 baris = 1 kata (jp+arti). Harian: 1 baris kalimat bisa jadi BEBERAPA item (1 per kata di
+  // kata_baru, dengan arti per kata kalau udah diisi). Kalimat tanpa kata_baru (grammar-only) di-skip.
   function flattenExportItems(data) {
     const hasil = []
     data.forEach(row => {
       const sisi = sisiItem({ tipe: 'paket', data: { folder_id: row.paket?.folder_id ?? null, kolom: row.paket?.kolom } })
+      const info = { nama: row.paket?.nama, urutan: row.paket?.urutan, paketId: row.paket?.id }
       if (sisi === 'kanan') {
         if (!row.kata_baru) return
-        // arti per kata (kalau udah diisi) ikut masuk ke export PDF/TXT
-        parseKataBaru(row.kata_baru).forEach(w => {
-          hasil.push({ jp: w.kata, arti: w.arti, nama: row.paket?.nama, urutan: row.paket?.urutan })
-        })
+        parseKataBaru(row.kata_baru).forEach(w => hasil.push({ jp: w.kata, arti: w.arti, ...info }))
       } else {
-        hasil.push({ jp: row.jp, arti: row.arti, nama: row.paket?.nama, urutan: row.paket?.urutan })
+        hasil.push({ jp: row.jp, arti: row.arti, ...info })
       }
     })
     return hasil
   }
 
-  async function exportTxtHafalan() {
-    const { data, error } = await supabase
-      .from('kata')
-      .select('jp, arti, kata_baru, paket:paket_id (nama, urutan, folder_id, kolom)')
-      .eq('hafal', true)
-    if (error) { alert('Gagal ambil data: ' + error.message); return }
-    const items = data ? flattenExportItems(data) : []
-    if (items.length === 0) { alert('Belum ada kata yang hafal nih!'); return }
+  async function exportExcelHafalan() {
+    setExportLoading(true)
+    try {
+      const { data, error } = await fetchAll(() => supabase
+        .from('kata')
+        .select('jp, arti, kata_baru, urutan, created_at, paket:paket_id (id, nama, urutan, folder_id, kolom)')
+        .eq('hafal', true)
+        .order('id'))
+      if (error) throw error
+      // urutan kata di dalam paket = urutan di app (kolom urutan, kalau kosong pakai waktu dibuat)
+      const urutanEfektif = k => k.urutan ?? new Date(k.created_at).getTime()
+      const items = flattenExportItems([...(data || [])].sort((a, b) => urutanEfektif(a) - urutanEfektif(b)))
+      if (items.length === 0) { alert('Belum ada kata yang hafal nih!'); return }
 
-    const byPaket = {}
-    items.forEach(row => {
-      const nama = row.nama || 'Tanpa paket'
-      const urutan = row.urutan ?? 0
-      if (!byPaket[nama]) byPaket[nama] = { urutan, items: [] }
-      byPaket[nama].items.push(row)
-    })
-    const pakets = Object.entries(byPaket).sort((a, b) => a[1].urutan - b[1].urutan)
+      const biasa = items.filter(it => !adalahBunpou(it.jp))
+      // Bunpou dari semua paket: yang persis sama (tulisan + arti) cuma ditampilkan sekali
+      const bunpou = []
+      const sudah = new Set()
+      items.filter(it => adalahBunpou(it.jp)).forEach(it => {
+        const kunci = kunciKata(it.jp) + '|' + String(it.arti || '').trim().toLowerCase()
+        if (!sudah.has(kunci)) { sudah.add(kunci); bunpou.push(it) }
+      })
+      const peta = new Map()
+      biasa.forEach(it => {
+        const id = it.paketId ?? it.nama ?? 'tanpa-paket'
+        if (!peta.has(id)) peta.set(id, { nama: it.nama || 'Tanpa paket', urutan: it.urutan ?? 0, items: [] })
+        peta.get(id).items.push(it)
+      })
+      const pakets = [...peta.values()].sort((a, b) => a.urutan - b.urutan)
 
-    let txt = `Kosakata Immersion — Daftar Hafalan\nDiekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} · ${items.length} kata\n\n`
-    pakets.forEach(([nama, { items }]) => {
-      txt += `**${nama}**\n`
-      items.forEach(it => { txt += it.arti ? `${it.jp} — ${it.arti}\n` : `${it.jp}\n` })
-      txt += '\n'
-    })
+      const ExcelJS = await loadExcelJS()
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Hafalan')
+      ws.columns = [{ width: 42 }, { width: 52 }]
+      const tgl = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 
-    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `kosakata-hafalan-${new Date().toISOString().slice(0, 10)}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
+      ws.addRow(['Kosakata Immersion — Daftar Hafalan'])
+      ws.mergeCells('A1:B1')
+      ws.getCell('A1').font = { bold: true, size: 15, color: { argb: 'FF2D6A4A' } }
+      ws.addRow([`Diekspor: ${tgl} · ${biasa.length} kata${bunpou.length ? ` · ${bunpou.length} bunpou` : ''}`])
+      ws.mergeCells('A2:B2')
+      ws.getCell('A2').font = { size: 10, color: { argb: 'FF7AAA8A' } }
+      const kepala = ws.addRow(['JP', 'Arti'])
+      kepala.eachCell(c => { c.font = { bold: true, color: { argb: 'FF2D6A4A' } }; c.border = { bottom: { style: 'medium', color: { argb: 'FF2D6A4A' } } } })
+      ws.views = [{ state: 'frozen', ySplit: 3 }]
+
+      // baris judul yang di-stabilo (nama paket / "Bunpou")
+      const barisJudul = (teks, warna) => {
+        ws.addRow([])
+        const r = ws.addRow([teks, ''])
+        ws.mergeCells(`A${r.number}:B${r.number}`)
+        ;[1, 2].forEach(i => { r.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: warna } } })
+        r.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF1F4D36' } }
+        r.getCell(1).alignment = { vertical: 'middle' }
+        r.height = 24
+      }
+      const barisItem = it => {
+        const r = ws.addRow([it.jp, it.arti || ''])
+        r.getCell(1).font = { name: 'MS Mincho', size: 13 }
+        ;[1, 2].forEach(i => {
+          r.getCell(i).alignment = { vertical: 'middle', wrapText: true }
+          r.getCell(i).border = { bottom: { style: 'hair', color: { argb: 'FFBBBBBB' } } }
+        })
+      }
+
+      pakets.forEach(p => { barisJudul(p.nama, 'FFC6EDB8'); p.items.forEach(barisItem) }) // stabilo hijau
+      if (bunpou.length > 0) { barisJudul('Bunpou (dikumpulin dari semua paket)', 'FFFFC2E0'); bunpou.forEach(barisItem) } // stabilo pink
+
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `kosakata-hafalan-${new Date().toISOString().slice(0, 10)}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert('Gagal bikin Excel: ' + e.message)
+    } finally {
+      setExportLoading(false)
+    }
   }
 
   // ---------- aksi folder ----------
@@ -519,11 +513,11 @@ export default function PaketList({ goTo, openPaket }) {
   // ----- tes perubahan kata: pilih mode dulu (acak / satu jenis), latihan santai (tidak mengubah status hafal) -----
   async function mulaiTesUbah() {
     setTesUbah({ loading: true })
-    const { data, error } = await supabase
+    const { data, error } = await fetchAll(() => supabase
       .from('kata')
       .select('id, jp, kata_baru, paket:paket_id (id, nama)')
       .ilike('kata_baru', '%|%')
-      .limit(2000)
+      .order('id'))
     if (error) { alert('Gagal ambil soal: ' + error.message); setTesUbah(null); return }
     // satu soal = satu kata + satu jenis. Semua bentuk yang pernah dicatat untuk kombinasi itu
     // (misal 過ごせます dan 過ごせません sama-sama 可能形) jadi "varian" yang sama-sama dianggap benar.
@@ -647,7 +641,10 @@ export default function PaketList({ goTo, openPaket }) {
                 <div style={{ background: '#f0f7f0', borderRadius: 10, padding: '10px 12px', margin: '8px 0 4px', textAlign: 'left', maxHeight: 220, overflowY: 'auto' }}>
                   <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', color: '#7aaa8a', marginBottom: 6 }}>Contoh kalimat</div>
                   {semuaKalimat.map((x, i) => (
-                    <div key={i} style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 14, lineHeight: 1.7, marginTop: i ? 6 : 0 }}>{sorotKalimat(x.kal, x.bentuk)}</div>
+                    <div key={i} style={{ display: 'flex', gap: 6, fontFamily: "'Noto Serif JP', serif", fontSize: 14, lineHeight: 1.7, marginTop: i ? 6 : 0 }}>
+                      <span style={{ flexShrink: 0 }}>·</span>
+                      <span>{sorotKalimat(x.kal, x.bentuk)}</span>
+                    </div>
                   ))}
                 </div>
               )}
@@ -872,7 +869,14 @@ export default function PaketList({ goTo, openPaket }) {
 
   return (
     <div className="cover" style={{ justifyContent: 'flex-start', paddingTop: 60 }}>
-      <button className="back-fab" onClick={() => goTo('cover')}>←</button>
+      {/* lewat portal ke <body> supaya benar-benar fixed (nggak ikut ke-scroll walau ada parent ber-transform) */}
+      {createPortal(
+        <button
+          className="back-fab" onClick={() => goTo('cover')}
+          style={{ position: 'fixed', left: 'auto', ...(fabKanan !== null ? { right: fabKanan } : {}) }}
+        >←</button>,
+        document.body
+      )}
       <div className="cover-inner paket-list-wide">
         <div className="cover-head">
           <div className="cover-emoji">📚</div>
@@ -882,25 +886,12 @@ export default function PaketList({ goTo, openPaket }) {
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
             <button
-              className="icon-btn" title="Download PDF (buat dibaca)" onClick={exportSemuaHafalan}
+              className="icon-btn" title="Download daftar hafalan ke Excel" onClick={exportExcelHafalan}
               disabled={exportLoading}
-              style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
+              style={{ width: 40, height: 40, fontSize: 10, fontWeight: 700 }}
             >
-              {exportLoading ? '⏳' : 'PDF'}
+              {exportLoading ? '⏳' : 'Excel'}
             </button>
-            <button
-              className="icon-btn" title="Download TXT (buat dikasih ke AI)" onClick={exportTxtHafalan}
-              style={{ width: 36, height: 36, fontSize: 11, fontWeight: 700 }}
-            >
-              MD
-            </button>
-          </div>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button
-              className="act-btn" onClick={mulaiTesUbah} title="Latihan menebak perubahan bentuk kata"
-              style={{ width: 165, height: 38, borderRadius: 12, padding: '0 6px', margin: 0, boxSizing: 'border-box', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
-            >📝 Tes Perubahan Kata</button>
             {streak > 0 && (
               <div
                 title={aktifHariIni
@@ -917,9 +908,16 @@ export default function PaketList({ goTo, openPaket }) {
               </div>
             )}
           </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+            <button
+              className="act-btn" onClick={mulaiTesUbah} title="Latihan menebak perubahan bentuk kata"
+              style={{ width: 165, height: 38, borderRadius: 12, padding: '0 6px', margin: 0, boxSizing: 'border-box', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+            >📝 Tes Perubahan Kata</button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginBottom: 18 }}>
+        <div ref={barisCariRef} style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginBottom: 18 }}>
           <input
             className="input-search" placeholder="🔍 Cari kata (kanji/kana atau artinya)..."
             value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 0, margin: 0 }}
@@ -975,7 +973,7 @@ export default function PaketList({ goTo, openPaket }) {
                   return (
                     <div
                       key={k.id} className="paket-row" style={{ cursor: k.paket ? 'pointer' : 'default' }}
-                      onClick={() => k.paket && openPaket(k.paket.id)}
+                      onClick={() => { if (window.getSelection()?.toString()) return; k.paket && openPaket(k.paket.id) }}
                     >
                       <div className="info">
                         <div className="nama">
@@ -994,8 +992,9 @@ export default function PaketList({ goTo, openPaket }) {
                         )}
                         {tampil.map((c, i) => (
                           <div
-                            key={i} className="meta" style={{ display: 'block', marginTop: 4 }}
-                            onClick={e => { e.stopPropagation(); c.paket && openPaket(c.paket.id) }}
+                            key={i} className="meta"
+                            style={{ display: 'block', marginTop: 4, userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }}
+                            onClick={e => e.stopPropagation()}
                           >
                             <span>· </span>
                             <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{c.jp}</span>
