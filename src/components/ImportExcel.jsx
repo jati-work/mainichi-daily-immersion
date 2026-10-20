@@ -21,7 +21,7 @@ const KOLOM = {
     { field: 'jp', judul: 'Kalimat JP', wajib: true, alias: ['jp', 'kalimat', 'kalimatjp', 'kata', 'katajp', 'ekspresi'] },
     { field: 'arti', judul: 'Arti', wajib: true, alias: ['arti', 'artiid', 'artiindonesia', 'meaning', 'terjemahan'] },
     { field: 'kata_baru', judul: 'Kata Baru', alias: ['katabaru', 'katabarudipelajari'] },
-    { field: 'kata_baru_arti', judul: 'Arti Kata Baru', alias: ['artikatabaru', 'artikata', 'artitiapkata'] },
+    { field: 'kata_baru_arti', judul: 'Arti Kata Baru', hanyaImport: true, alias: ['artikatabaru', 'artikata', 'artitiapkata'] }, // nggak ikut export/template; dibaca kalau ada (file lama)
     { field: 'kata_baru_bentuk', judul: 'Bentuk di Kalimat', alias: ['bentukdikalimat', 'bentukkalimat', 'bentukkalimatkata', 'bentukkata'] },
     { field: 'kata_baru_jenis', judul: 'Jenis Perubahan', alias: ['jenisperubahan', 'jeniskata', 'jenisperubahankata'] },
     { field: 'konteks', judul: 'Konteks', alias: ['konteks', 'situasi'] },
@@ -29,6 +29,7 @@ const KOLOM = {
     { field: 'bagian', judul: 'Bagian', alias: ['bagian'] },
   ],
 }
+const kolomTampil = sisi => KOLOM[sisi].filter(c => !c.hanyaImport) // kolom yang muncul di template & export
 const SEMUA_FIELD = ['jp', 'arti', 'bagian', 'contoh_kalimat', 'bunshuu', 'plesetan', 'konteks', 'nuansa', 'kata_baru', 'kata_baru_arti', 'kata_baru_bentuk', 'kata_baru_jenis']
 // id & hafal dibaca TERPISAH dari SEMUA_FIELD -- cuma relevan buat file hasil
 // "Export semua kata" yang nanti di-upload ulang buat UPDATE, bukan buat
@@ -49,11 +50,10 @@ const pecahTag = s => String(s || '').split(/[,，、､]/).map(w => w.trim()).f
 // Kata Baru boleh "kata=arti" (atau ＝). kataSaja() ambil kata-nya aja buat pencocokan.
 const kataSaja = t => String(t).split(/[=＝]/)[0].trim()
 
-// ---------- Kata Baru dipecah jadi 4 kolom di Excel ----------
+// ---------- Kata Baru di Excel: satu kata per BARIS di dalam satu kotak ----------
 // Di database Kata Baru tetap SATU teks: "kata=arti|bentuk|jenis, kata2=arti2, ..." (format app).
-// Di Excel: kolom Kata Baru, Arti Kata Baru, Bentuk di Kalimat, Jenis Perubahan; isi tiap kolom
-// dipisah "、" dan urutannya SEJAJAR (kata ke-1 = arti ke-1 = bentuk ke-1 = jenis ke-1).
-const PEMISAH_SEL = '、'
+// Di Excel: kotak Kata Baru berisi satu baris per kata ("kata = arti"); kotak Bentuk di Kalimat dan
+// Jenis Perubahan juga satu baris per kata, urutannya SAMA dengan baris di Kata Baru.
 const JENIS_DIKENAL = ['ます形', 'て形', 'た形', 'ない形', '可能形', '受身形', '使役形', '命令形', '意向形', '条件形']
 // sama persis dengan parseKataBaru di PaketDetail.jsx
 function pecahKataBaruLengkap(s) {
@@ -64,35 +64,54 @@ function pecahKataBaruLengkap(s) {
     return { kata: t.slice(0, i).trim(), arti, bentuk, jenis }
   }).filter(x => x.kata)
 }
-// teks Kata Baru dari database -> isi 4 sel Excel
+// teks Kata Baru dari database -> isi 3 sel Excel (satu baris per kata)
 function sebarKataBaru(s) {
   const w = pecahKataBaruLengkap(s)
-  const sel = arr => { const a = [...arr]; while (a.length && !a[a.length - 1]) a.pop(); return a.join(PEMISAH_SEL) } // sel kosong di ekor dibuang
+  const baris = arr => { const a = [...arr]; while (a.length && !a[a.length - 1]) a.pop(); return a.join('\n') } // baris kosong di tengah dipertahankan, di ekor dibuang
   return {
-    kata_baru: w.map(x => x.kata).join(PEMISAH_SEL),
-    kata_baru_arti: sel(w.map(x => x.arti)),
-    kata_baru_bentuk: sel(w.map(x => x.bentuk)),
-    kata_baru_jenis: sel(w.map(x => x.jenis)),
+    kata_baru: w.map(x => (x.arti ? `${x.kata} = ${x.arti}` : x.kata)).join('\n'),
+    kata_baru_bentuk: baris(w.map(x => x.bentuk)),
+    kata_baru_jenis: baris(w.map(x => x.jenis)),
   }
 }
-// isi 4 sel Excel -> teks Kata Baru format app. Format lama (satu kolom: 過ごす=arti|bentuk|jenis)
-// tetap dibaca; kalau kolom baru terisi, dialah yang dipakai.
+// ukuran kotak: huruf Jepang (full-width) makan tempat 2x
+const c_isKB = f => f === 'kata_baru' || f === 'kata_baru_bentuk' || f === 'kata_baru_jenis'
+const lebarTeks = t => [...String(t)].reduce((n, ch) => n + (/[\u1100-\u11ff\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(ch) ? 2 : 1), 0)
+const lebarKolomKB = (teksList, min, max) => Math.min(max, Math.max(min, Math.ceil(Math.max(0, ...teksList.flatMap(t => String(t).split('\n').map(lebarTeks))) * 1.1) + 3))
+const jumlahBarisTampil = (teks, lebarKolom) => String(teks).split('\n').reduce((n, l) => n + Math.max(1, Math.ceil((lebarTeks(l) * 1.1 + 1) / (lebarKolom - 1))), 0)
+
+// isi sel Excel -> teks Kata Baru format app. Yang dikenali:
+//  - format sekarang: satu kata per baris "kata = arti", bentuk/jenis per baris di kotak sebelahnya
+//  - format lama: kata dipisah koma, "過ごす=arti|bentuk|jenis", atau kolom "Arti Kata Baru" terpisah (dipisah 、)
 function gabungKataBaruDariKolom(o) {
-  const tag = pecahKataBaruLengkap(o.kata_baru)
-  // sel kosong JANGAN dibuang: posisinya yang menyambungkan kata ke arti/bentuk/jenis-nya
-  const potong = x => String(x || '').split(/[,，、､]/).map(t => t.trim())
+  // Pecah isi sel jadi daftar per POSISI. Posisi kosong DIPERTAHANKAN: posisinya yang menyambungkan kata
+  // ke bentuk/jenis-nya. Sel berisi baris baru -> satu baris = satu posisi; kalau nggak -> dipecah koma.
+  const potong = x => {
+    const t = String(x || '')
+    return (t.includes('\n') ? t.split('\n') : t.split(/[,，、､]/)).map(v => v.trim())
+  }
+  const ura = t => {
+    const i = t.search(/[=＝]/)
+    if (i === -1) return { kata: t, arti: '', bentuk: '', jenis: '' }
+    const [arti = '', bentuk = '', jenis = ''] = t.slice(i + 1).split(/[|｜]/).map(x => x.trim())
+    return { kata: t.slice(0, i).trim(), arti, bentuk, jenis }
+  }
+  const tag = potong(o.kata_baru).map(ura)
   const arti = potong(o.kata_baru_arti), bentuk = potong(o.kata_baru_bentuk), jenis = potong(o.kata_baru_jenis)
   const panjang = a => { let n = a.length; while (n > 0 && !a[n - 1]) n--; return n }
-  const bersih = x => String(x || '').replace(/[=＝|｜]/g, '').trim()
-  const bersihJenis = x => bersih(x).replace(/\s*[（(].*$/, '').trim() // "可能形 (potensial)" -> "可能形"
-  const kata_baru = tag.map((w, i) => {
-    const a = bersih(arti[i]) || w.arti
-    const b = bersih(bentuk[i]) || w.bentuk
-    const j = bersihJenis(jenis[i]) || w.jenis
-    if (b || j) return `${w.kata}=${a}|${b}|${j}`
-    return a ? `${w.kata}=${a}` : w.kata
-  }).join(', ')
-  return { kata_baru, lebih: Math.max(panjang(arti), panjang(bentuk), panjang(jenis)) > tag.length }
+  // sama seperti form di app: koma di arti jadi "/", karakter format (= |) dibuang
+  const bersihArti = x => String(x || '').replace(/[=＝|｜]/g, '').replace(/\s*[,，、]\s*/g, '/').trim()
+  const bersihBentuk = x => String(x || '').replace(/[,，、=＝|｜]/g, '').trim()
+  const bersihJenis = x => String(x || '').replace(/[=＝|｜]/g, '').replace(/\s*[（(].*$/, '').trim() // "可能形 (potensial)" -> "可能形"
+  const hasil = []
+  tag.forEach((w, i) => {
+    if (!w.kata) return
+    const a = bersihArti(arti[i]) || bersihArti(w.arti)
+    const b = bersihBentuk(bentuk[i]) || bersihBentuk(w.bentuk)
+    const j = bersihJenis(jenis[i]) || bersihJenis(w.jenis)
+    hasil.push(b || j ? `${w.kata}=${a}|${b}|${j}` : (a ? `${w.kata}=${a}` : w.kata))
+  })
+  return { kata_baru: hasil.join(', '), lebih: Math.max(panjang(arti), panjang(bentuk), panjang(jenis)) > tag.length }
 }
 
 // ambil jp + kata_baru semua kata (Supabase default cuma ngembaliin 1000 baris per request)
@@ -128,7 +147,11 @@ function bacaSheet(XLSX, ws, sisi) {
   aoa.slice(barisHeader + 1).forEach((r, i) => {
     if (r.every(c => String(c).trim() === '')) return
     const o = { _no: barisHeader + i + 2 }
-    SEMUA_FIELD.forEach(f => { o[f] = peta[f] !== undefined ? String(r[peta[f]] ?? '').trim() : '' })
+    SEMUA_FIELD.forEach(f => {
+      const v = peta[f] !== undefined ? String(r[peta[f]] ?? '') : ''
+      // sel Kata Baru/Bentuk/Jenis: baris kosong di AWAL harus tetap ada (posisinya penting), jadi cuma ekornya yang dipangkas
+      o[f] = f.startsWith('kata_baru') ? v.replace(/\r\n?/g, '\n').replace(/\s+$/, '') : v.trim()
+    })
     o.id = kolomId !== undefined ? String(r[kolomId] ?? '').trim() : ''
     o.hafal = kolomHafal !== undefined ? nilaiYa(r[kolomHafal]) : undefined
     if (sisi === 'kanan') {
@@ -187,11 +210,12 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
     setBusy(true)
     try {
       const ExcelJS = await loadExcelJS()
-      const kolom = KOLOM[sisi]
+      const kolom = kolomTampil(sisi)
       const wb = new ExcelJS.Workbook()
 
       const ws = wb.addWorksheet(mode === 'root' ? 'Paket 1' : 'Kata')
-      ws.columns = kolom.map(c => ({ header: c.judul, width: c.field === 'jp' || c.field === 'arti' ? 30 : 22 }))
+      const lebarTemplate = { kata_baru: 40, kata_baru_bentuk: 20, kata_baru_jenis: 18 }
+      ws.columns = kolom.map(c => ({ header: c.judul, width: lebarTemplate[c.field] ?? (c.field === 'jp' || c.field === 'arti' ? 30 : 22) }))
       kolom.forEach((c, i) => { if (KOLOM_JEPANG.includes(c.field)) ws.getColumn(i + 1).font = FONT_EXCEL_JEPANG })
       ws.getRow(1).eachCell((cell, i) => {
         cell.font = { bold: true, color: { argb: kolom[i - 1].wajib ? 'FFFFFFFF' : 'FF2D6A4A' } }
@@ -212,12 +236,16 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           ? 'Satu sheet = satu paket baru. Nama sheet jadi nama paket (maks. 31 karakter). Tambah sheet buat paket lain.'
           : 'Cuma sheet pertama (selain sheet Petunjuk ini) yang dibaca.',
         ...(sisi === 'kanan' ? [
-          'Kata Baru ada 4 kolom: Kata Baru, Arti Kata Baru, Bentuk di Kalimat, Jenis Perubahan. Satu baris = satu kalimat. Cuma Kata Baru yang perlu diisi, tiga lainnya boleh kosong.',
-          'Kalau ada beberapa kata, pisahkan pakai koma Jepang (、) tanpa spasi, dan urutannya harus SEJAJAR di keempat kolom (kata ke-1 = arti ke-1 = bentuk ke-1 = jenis ke-1). Koma biasa (,) juga bisa.',
-          'Contoh: Kata Baru = 日本語、聞く、ちょっと | Arti Kata Baru = bahasa jepang、mendengarkan、sedikit | Bentuk di Kalimat = 、聞いて | Jenis Perubahan = 、て形',
-          'Kata yang nggak punya arti/bentuk/jenis: biarkan kosong di posisinya (di contoh, kata ke-1 kosong di Bentuk dan Jenis). Arti jangan pakai koma.',
+          'Kata Baru ada 3 kolom: Kata Baru, Bentuk di Kalimat, Jenis Perubahan. Satu baris Excel = satu kalimat. Cuma Kata Baru yang perlu diisi, dua lainnya boleh kosong.',
+          'Di kotak Kata Baru, tulis SATU KATA PER BARIS (pindah baris pakai Alt+Enter) dengan format: kata = arti. Contoh isi satu kotak:',
+          '        日本語 = bahasa jepang',
+          '        聞く = mendengarkan',
+          '        ちょっと = sedikit',
+          'Bentuk di Kalimat dan Jenis Perubahan: isi juga per baris, urutannya SAMA dengan baris di Kata Baru (baris ke-1 = kata ke-1, dst). Kata yang nggak punya bentuk/jenis: kosongin barisnya.',
+          'Contoh di atas, kalau 聞く di kalimat berubah jadi 聞いて (て形): kotak Bentuk = (baris 1 kosong) lalu 聞いて di baris 2, kotak Jenis = (baris 1 kosong) lalu て形 di baris 2.',
+          'Arti boleh dikosongin (tulis kata-nya aja). Koma di dalam arti otomatis jadi tanda /.',
           `Jenis Perubahan yang dikenal: ${JENIS_DIKENAL.join('、')}.`,
-          'Format lama (satu kolom Kata Baru berisi 過ごす=arti|bentuk|jenis) masih bisa dibaca.',
+          'Format lama masih bisa dibaca: kata dipisah koma, 過ごす=arti|bentuk|jenis, atau kolom Arti Kata Baru terpisah.',
         ] : []),
         sisi === 'kiri' ? 'Plesetan Indo: plesetan bunyi kata dalam bahasa Indonesia (jembatan keledai), contoh: koro bu → kacang koro bu. Dipakai di mode tes "Plesetan → Kanji + Arti".' : '',
         'Bagian: nama bagian (contoh: Episode 1). Bagian yang belum ada dibuat otomatis.',
@@ -249,21 +277,35 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
     setBusy(true)
     try {
       const ExcelJS = await loadExcelJS()
-      const kolom = KOLOM[sisi]
+      const kolom = kolomTampil(sisi)
       const wb = new ExcelJS.Workbook()
       const ws = wb.addWorksheet('Kata')
+      const urut = [...daftar].sort((a, b) => (a.urutan ?? 0) - (b.urutan ?? 0))
+      const kbPer = sisi === 'kanan' ? urut.map(k => sebarKataBaru(k.kata_baru)) : []
+      // lebar kotak Kata Baru/Bentuk/Jenis disesuaikan isinya supaya baris-barisnya nggak kelipat
+      const lebarKB = {
+        kata_baru: lebarKolomKB(kbPer.map(x => x.kata_baru), 26, 85),
+        kata_baru_bentuk: lebarKolomKB(kbPer.map(x => x.kata_baru_bentuk), 20, 30),
+        kata_baru_jenis: lebarKolomKB(kbPer.map(x => x.kata_baru_jenis), 18, 24),
+      }
       const semuaKolom = [
-        ...kolom.map(c => ({ judul: c.judul, wch: c.field === 'jp' || c.field === 'arti' ? 28 : 20 })),
+        ...kolom.map(c => ({ judul: c.judul, wch: lebarKB[c.field] ?? (c.field === 'jp' || c.field === 'arti' ? 28 : 20) })),
         { judul: 'Hafal', wch: 10 },
       ]
       ws.columns = semuaKolom.map(c => ({ header: c.judul, width: c.wch }))
       kolom.forEach((c, i) => { if (KOLOM_JEPANG.includes(c.field)) ws.getColumn(i + 1).font = FONT_EXCEL_JEPANG })
       ws.getRow(1).font = { bold: true, color: { argb: 'FF2D6A4A' } }
 
-      ;[...daftar].sort((a, b) => (a.urutan ?? 0) - (b.urutan ?? 0)).forEach(k => {
-        const kb = sisi === 'kanan' ? sebarKataBaru(k.kata_baru) : null
+      urut.forEach((k, n) => {
+        const kb = sisi === 'kanan' ? kbPer[n] : null
         const baris = [...kolom.map(c => (kb && c.field in kb ? kb[c.field] : (k[c.field] ?? ''))), k.hafal ? 'Ya' : '']
-        ws.addRow(baris)
+        const r = ws.addRow(baris)
+        if (kb) {
+          // semua sel rata ATAS (biar sejajar dengan baris pertama kotak Kata Baru yang tinggi); 3 kotak Kata Baru dibungkus
+          for (let i = 1; i <= kolom.length + 1; i++) r.getCell(i).alignment = { vertical: 'top', wrapText: i <= kolom.length && c_isKB(kolom[i - 1].field) }
+          const tinggi = Math.max(...Object.keys(lebarKB).map(f => jumlahBarisTampil(kb[f], lebarKB[f])))
+          if (tinggi > 1) r.height = tinggi * 17 + 2
+        }
       })
 
       const wsP = wb.addWorksheet('Petunjuk')
@@ -276,7 +318,7 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
           : `Isi: SEMUA kata di paket "${namaPaket}" (hafal maupun belum), total ${daftar.length} kata.`,
         hanyaBagian ? 'Biar kata tetap di bagian ini, jangan ubah kolom Bagian. Baris baru yang kolom Bagian-nya dikosongin otomatis masuk ke bagian yang lagi dibuka pas kamu upload.' : '',
         'File ini buat cadangan/dibaca. Kalau di-upload balik, semua barisnya masuk sebagai kata BARU (nggak ada fitur update lewat Excel).',
-        sisi === 'kanan' ? 'Kata Baru dipecah 4 kolom (Kata Baru, Arti Kata Baru, Bentuk di Kalimat, Jenis Perubahan). Isi tiap kolom dipisah 、 dan urutannya sejajar: kata ke-1 = arti ke-1 = bentuk ke-1 = jenis ke-1. Kosong = dibiarkan kosong di posisinya.' : '',
+        sisi === 'kanan' ? 'Kotak Kata Baru: satu baris = satu kata, format "kata = arti". Kotak Bentuk di Kalimat dan Jenis Perubahan: satu baris per kata juga, urutannya sama dengan baris di Kata Baru (baris kosong = kata itu nggak punya bentuk/jenis).' : '',
         'Kolom Hafal: isi "Ya" kalau udah hafal, kosongin kalau belum.',
       ].filter(t => t !== '').forEach(t => wsP.addRow([t]))
       wsP.getRow(1).font = { bold: true, size: 13, color: { argb: 'FF2D6A4A' } }
