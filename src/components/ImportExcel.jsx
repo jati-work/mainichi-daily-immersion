@@ -75,10 +75,14 @@ function sebarKataBaru(s) {
   }
 }
 // ukuran kotak: huruf Jepang (full-width) makan tempat 2x
-const c_isKB = f => f === 'kata_baru' || f === 'kata_baru_bentuk' || f === 'kata_baru_jenis'
 const lebarTeks = t => [...String(t)].reduce((n, ch) => n + (/[\u1100-\u11ff\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/.test(ch) ? 2 : 1), 0)
-const lebarKolomKB = (teksList, min, max) => Math.min(max, Math.max(min, Math.ceil(Math.max(0, ...teksList.flatMap(t => String(t).split('\n').map(lebarTeks))) * 1.1) + 3))
-const jumlahBarisTampil = (teks, lebarKolom) => String(teks).split('\n').reduce((n, l) => n + Math.max(1, Math.ceil((lebarTeks(l) * 1.1 + 1) / (lebarKolom - 1))), 0)
+// lebar kolom = baris terpanjang di kolom itu (dilebihkan sedikit biar lega di Excel manapun), minimal muat judulnya, maksimal `maks`
+// (isi yang lebih panjang dari `maks` dibungkus ke baris berikutnya)
+const lebarKolomOtomatis = (teksList, judul, maks) => {
+  const isi = Math.max(0, ...teksList.flatMap(t => String(t).split('\n').map(lebarTeks)))
+  const min = Math.ceil(lebarTeks(judul) * 1.25) + 3
+  return Math.min(maks, Math.max(min, Math.ceil(isi * 1.2) + 3))
+}
 
 // isi sel Excel -> teks Kata Baru format app. Yang dikenali:
 //  - format sekarang: satu kata per baris "kata = arti", bentuk/jenis per baris di kotak sebelahnya
@@ -282,14 +286,12 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
       const ws = wb.addWorksheet('Kata')
       const urut = [...daftar].sort((a, b) => (a.urutan ?? 0) - (b.urutan ?? 0))
       const kbPer = sisi === 'kanan' ? urut.map(k => sebarKataBaru(k.kata_baru)) : []
-      // lebar kotak Kata Baru/Bentuk/Jenis disesuaikan isinya supaya baris-barisnya nggak kelipat
-      const lebarKB = {
-        kata_baru: lebarKolomKB(kbPer.map(x => x.kata_baru), 26, 85),
-        kata_baru_bentuk: lebarKolomKB(kbPer.map(x => x.kata_baru_bentuk), 20, 30),
-        kata_baru_jenis: lebarKolomKB(kbPer.map(x => x.kata_baru_jenis), 18, 24),
-      }
+      // isi tiap sel (sama dengan yang ditulis ke baris)
+      const nilaiSel = (c, k, n) => (sisi === 'kanan' && c.field in kbPer[n] ? kbPer[n][c.field] : (k[c.field] ?? ''))
+      // lebar tiap kolom disesuaikan isinya, jadi nggak ada teks yang kepotong dan nggak perlu digeser manual
+      const batasLebar = { jp: 60, arti: 60, kata_baru: 100, kata_baru_bentuk: 36, kata_baru_jenis: 28 }
       const semuaKolom = [
-        ...kolom.map(c => ({ judul: c.judul, wch: lebarKB[c.field] ?? (c.field === 'jp' || c.field === 'arti' ? 28 : 20) })),
+        ...kolom.map(c => ({ judul: c.judul, wch: lebarKolomOtomatis(urut.map((k, n) => nilaiSel(c, k, n)), c.judul, batasLebar[c.field] ?? 45) })),
         { judul: 'Hafal', wch: 10 },
       ]
       ws.columns = semuaKolom.map(c => ({ header: c.judul, width: c.wch }))
@@ -297,15 +299,11 @@ export default function ImportExcel({ mode, sisi, paketId, bagianList = [], fold
       ws.getRow(1).font = { bold: true, color: { argb: 'FF2D6A4A' } }
 
       urut.forEach((k, n) => {
-        const kb = sisi === 'kanan' ? kbPer[n] : null
-        const baris = [...kolom.map(c => (kb && c.field in kb ? kb[c.field] : (k[c.field] ?? ''))), k.hafal ? 'Ya' : '']
+        const baris = [...kolom.map(c => nilaiSel(c, k, n)), k.hafal ? 'Ya' : '']
         const r = ws.addRow(baris)
-        if (kb) {
-          // semua sel rata ATAS (biar sejajar dengan baris pertama kotak Kata Baru yang tinggi); 3 kotak Kata Baru dibungkus
-          for (let i = 1; i <= kolom.length + 1; i++) r.getCell(i).alignment = { vertical: 'top', wrapText: i <= kolom.length && c_isKB(kolom[i - 1].field) }
-          const tinggi = Math.max(...Object.keys(lebarKB).map(f => jumlahBarisTampil(kb[f], lebarKB[f])))
-          if (tinggi > 1) r.height = tinggi * 17 + 2
-        }
+        // semua sel rata ATAS + teks dibungkus. Tinggi baris SENGAJA nggak di-set: Excel yang menyesuaikan
+        // otomatis saat file dibuka, jadi semua baris dalam kotak kelihatan (nggak perlu ditarik manual).
+        for (let i = 1; i <= baris.length; i++) r.getCell(i).alignment = { vertical: 'top', wrapText: true }
       })
 
       const wsP = wb.addWorksheet('Petunjuk')
