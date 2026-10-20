@@ -51,8 +51,8 @@ export default function Cover({ goTo, jumlahPaket, jumlahKata, jumlahHariAktif }
         <div className="nav-card" onClick={() => goTo('paket')}>
           <div className="nav-icon">📚</div>
           <div className="nav-info">
-            <div className="nav-title">Kosakata Immersion</div>
-            <div className="nav-desc">kosakata dari keseharian</div>
+            <div className="nav-title">Kotoba Immersion</div>
+            <div className="nav-desc">kotoba dari keseharian</div>
           </div>
         </div>
 
