@@ -88,6 +88,7 @@ export default function ImportExcelRadikal({ radikalList, onDone }) {
         'Wajib diisi (header biru): Kategori, Karakter, Arti. Menemonik (header hijau) opsional.',
         `Kategori yang udah ada: ${NAMA_KATEGORI.join(', ')}. Boleh juga pakai nama kategori baru, nanti otomatis dibikin.`,
         'Radikal yang karakter+kategori+arti-nya SAMA PERSIS sama yang udah ada bakal dilewati (dianggap dobel).',
+        'Template ini nggak punya kolom ID, jadi SEMUA baris dianggap radikal BARU. Buat ngubah radikal yang udah ada (isi menemonik, benerin typo, dll) jangan pakai template ini: pakai "Export semua radikal", edit, lalu upload balik.',
         'Jangan ubah nama kolom di baris pertama. Sheet "Petunjuk" nggak ikut diimpor.',
       ].forEach(t => wsP.addRow([t]))
       wsP.getRow(1).font = { bold: true, size: 13, color: { argb: 'FF2D6A4A' } }
@@ -130,6 +131,17 @@ export default function ImportExcelRadikal({ radikalList, onDone }) {
         'Mau nambah radikal baru? Tambah baris baru di bawah, kosongin aja kolom ID-nya.',
         'Kolom Hafal: isi "Ya" kalau udah hafal, kosongin kalau belum.',
         'Upload balik lewat tombol yang sama > "Pilih file Excel".',
+        '',
+        'Pakai ID atau nggak?',
+        '• Ada ID di barisnya = UPDATE radikal itu (karakter, arti, kategori, dan menemonik ikut berubah sesuai isi file).',
+        '• ID kosong = dianggap radikal BARU (dilewati kalau karakter+kategori+arti-nya sama persis sama yang udah ada).',
+        '',
+        'Upload sebagian:',
+        '• Cuma beberapa radikal: hapus BARIS radikal yang nggak mau diubah (klik kanan nomor baris > Delete). Radikal yang nggak ada di file nggak disentuh, dan upload nggak pernah menghapus radikal.',
+        '• Cuma isi/ubah Menemonik: ubah kolom Menemonik aja. Kolom ID, Kategori, Karakter, Arti biarin apa adanya, jangan dihapus dan jangan dikosongin (ketiganya tetap wajib terisi).',
+        '• Menemonik dikosongin = menemoniknya ke-HAPUS, bukan dilewati. Kalau nggak mau ketimpa, hapus baris itu dari file.',
+        '• Kolom Hafal: kalau dihapus dari file, status hafal nggak berubah. Kalau ada tapi selnya kosong, radikalnya di-set BELUM hafal.',
+        '• File yang cuma berisi Karakter + Menemonik (tanpa ID, Kategori, Arti) nggak bisa dipakai.',
       ].forEach(t => wsP.addRow([t]))
       wsP.getRow(1).font = { bold: true, size: 13, color: { argb: 'FF2D6A4A' } }
 
