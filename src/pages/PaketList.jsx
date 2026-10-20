@@ -880,7 +880,6 @@ export default function PaketList({ goTo, openPaket }) {
           <div className="cover-emoji">📚</div>
           <div>
             <div className="cover-title" style={{ fontSize: 22 }}>Kotoba Immersion</div>
-            <div className="cover-sub">kosakata dari keseharian</div>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
             <button
