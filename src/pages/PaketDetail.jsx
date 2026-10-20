@@ -1245,7 +1245,7 @@ async function hapusPdf() {
       </div>
 
       <div className={`modal-overlay ${dup ? 'open' : ''}`}>
-        <div className="modal-box">
+        <div className="modal-box" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
           <div className="modal-icon">{dup?.mode === 'warn' ? '⚠️' : '🔁'}</div>
           <div className="modal-title">{dup?.mode === 'warn' ? 'Kata Ini Udah Pernah Dicatat' : 'Kalimat Ini Udah Pernah Dicatat!'}</div>
           <div className="modal-desc">
@@ -1254,9 +1254,11 @@ async function hapusPdf() {
             ) : (
               <>
                 <b>{dup?.matches?.[0]?.kata}</b> udah ada di beberapa paket:
-                <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-                  {dup?.matches?.map((m, i) => <li key={i}><b>{m.nama}</b>{m.tanggal ? ` (${m.tanggal})` : ''}</li>)}
-                </ul>
+                <div style={{ maxHeight: 'min(38vh, 320px)', overflowY: 'auto', marginTop: 6, paddingRight: 4 }}>
+                  <ul style={{ margin: '0 0 0 18px', padding: 0 }}>
+                    {dup?.matches?.map((m, i) => <li key={i}><b>{m.nama}</b>{m.tanggal ? ` (${m.tanggal})` : ''}</li>)}
+                  </ul>
+                </div>
               </>
             )}
             <br /><br />
