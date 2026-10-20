@@ -4,6 +4,7 @@ import PdfHighlighter from './PdfHighlighter'
 import DiaryHalaman from './DiaryHalaman'
 import RadicalPicker from './RadicalPicker'
 import ImportExcel from '../components/ImportExcel'
+import { fetchAll } from '../lib/fetchAll'
 
 // Romaji bantuan di belakang kalimat, contoh: 首に拭きます。 (kubi ni fukimasu)
 // Cuma kurung di AKHIR yang isinya huruf latin (dan ada huruf kecil) yang dianggap romaji,
@@ -52,6 +53,23 @@ const JENIS_PERUBAHAN = [
   { nilai: '意向形', label: '意向形 (ajakan)' },
   { nilai: '条件形', label: '条件形 (kondisional)' },
 ]
+
+// ---- pencarian duplikat di SERVER (filter kasar) ----
+// Variasi tulisan sebuah kata yang dipakai buat filter ILIKE di server. Server cuma
+// mempersempit kandidat (superset); keputusan "sama atau tidak" tetap pakai normalisasiJP di klien.
+function varianCari(kata) {
+  return [...new Set([jpMurni(kata).trim(), normalisasiJP(kata)].filter(Boolean))]
+}
+// Bikin pola ILIKE '%nilai%' yang aman dipakai di dalam filter .or() PostgREST:
+// (1) spasi/tanda baca yang dibuang normalisasiJP diganti wildcard % (jadi "ABC  TEST" tetap
+//     ketemu "ABC test"), (2) wildcard LIKE (% _ \) di nilai asli dijadikan literal,
+// (3) nilai dibungkus kutip ganda supaya koma/kurung/titik nggak merusak sintaks filter.
+function polaIlike(v) {
+  const bagian = String(v).split(/[\s、。！？・「」]+/).filter(Boolean).map(x => x.replace(/[\\%_]/g, '\\$&'))
+  if (bagian.length === 0) return null
+  const pola = '%' + bagian.join('%') + '%'
+  return '"' + pola.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'
+}
 
 function normalisasiID(s) {
   return String(s).trim().toLowerCase().replace(/[、。！？\s]/g, '')
@@ -278,7 +296,7 @@ export default function PaketDetail({ paketId, goTo }) {
     const { data: p } = await supabase.from('paket').select('*').eq('id', paketId).single()
     setPaket(p)
     if (p) setSisiPaket(await tentukanSisiStorage(p))
-    const { data: k } = await supabase.from('kata').select('*').eq('paket_id', paketId).order('created_at')
+    const { data: k } = await fetchAll(() => supabase.from('kata').select('*').eq('paket_id', paketId).order('created_at').order('id'))
     setKataList(k || [])
   }
 
@@ -372,11 +390,36 @@ export default function PaketDetail({ paketId, goTo }) {
 
   // cek exact-match kalimat penuh, KHUSUS ke field jp doang (bukan
   // kata_baru) -- dipake buat block total kalimat yang persis sama.
+  // Ambil baris kata yang KEMUNGKINAN cocok dengan salah satu kata, difilter di server
+  // (ILIKE di kolom-kolom yang diminta) lalu dipaginasi sampai habis. Hasilnya superset:
+  // pencocokan final tetap dilakukan di klien pakai normalisasiJP.
+  // Sebelumnya: seluruh tabel kata diunduh tiap kali simpan.
+  async function cariBarisKemungkinanCocok(daftarKata, kolomList, select, excludeId = null) {
+    const pola = [...new Set(daftarKata.flatMap(varianCari).map(polaIlike).filter(Boolean))]
+    if (pola.length === 0) return []
+    const potongan = []
+    for (let i = 0; i < pola.length; i += 10) potongan.push(pola.slice(i, i + 10)) // jaga panjang URL
+    const hasil = await Promise.all(potongan.map(async p => {
+      const cond = p.flatMap(x => kolomList.map(k => `${k}.ilike.${x}`)).join(',')
+      const { data, error } = await fetchAll(() => {
+        let q = supabase.from('kata').select(select).or(cond).order('id')
+        if (excludeId) q = q.neq('id', excludeId)
+        return q
+      })
+      if (error) console.error('Gagal cek duplikat:', error.message)
+      return data || []
+    }))
+    const unik = new Map()
+    hasil.flat().forEach(r => unik.set(r.id, r))
+    return [...unik.values()]
+  }
+
+  // cek exact-match kalimat penuh, KHUSUS ke field jp doang (bukan
+  // kata_baru) -- dipake buat block total kalimat yang persis sama.
   async function cekKalimatSama(jpText, excludeId = null) {
     const norm = normalisasiJP(jpText)
     if (!norm) return null
-    const { data } = await supabase.from('kata').select('id, jp, paket:paket_id (nama, tanggal)')
-    if (!data) return null
+    const data = await cariBarisKemungkinanCocok([jpText], ['jp'], 'id, jp, paket:paket_id (nama, tanggal)', excludeId)
     const match = data.find(row => row.id !== excludeId && normalisasiJP(row.jp) === norm)
     if (!match) return null
     return { kata: match.jp, nama: match.paket?.nama, tanggal: match.paket?.tanggal }
@@ -389,8 +432,7 @@ export default function PaketDetail({ paketId, goTo }) {
   async function cekDuplikatKata(kandidatList, excludeId = null) {
     const kandidat = kandidatList.map(normalisasiJP).filter(Boolean)
     if (kandidat.length === 0) return []
-    const { data } = await supabase.from('kata').select('id, jp, kata_baru, paket:paket_id (nama, tanggal)')
-    if (!data) return []
+    const data = await cariBarisKemungkinanCocok(kandidatList, ['jp', 'kata_baru'], 'id, jp, kata_baru, paket:paket_id (nama, tanggal)', excludeId)
     const hasil = []
     const sudahAda = new Set()
     for (const row of data) {
