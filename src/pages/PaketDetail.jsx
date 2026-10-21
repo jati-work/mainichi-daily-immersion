@@ -4,7 +4,6 @@ import PdfHighlighter from './PdfHighlighter'
 import DiaryHalaman from './DiaryHalaman'
 import RadicalPicker from './RadicalPicker'
 import ImportExcel from '../components/ImportExcel'
-import { fetchAll } from '../lib/fetchAll'
 
 // Romaji bantuan di belakang kalimat, contoh: 首に拭きます。 (kubi ni fukimasu)
 // Cuma kurung di AKHIR yang isinya huruf latin (dan ada huruf kecil) yang dianggap romaji,
@@ -54,23 +53,6 @@ const JENIS_PERUBAHAN = [
   { nilai: '条件形', label: '条件形 (kondisional)' },
 ]
 
-// ---- pencarian duplikat di SERVER (filter kasar) ----
-// Variasi tulisan sebuah kata yang dipakai buat filter ILIKE di server. Server cuma
-// mempersempit kandidat (superset); keputusan "sama atau tidak" tetap pakai normalisasiJP di klien.
-function varianCari(kata) {
-  return [...new Set([jpMurni(kata).trim(), normalisasiJP(kata)].filter(Boolean))]
-}
-// Bikin pola ILIKE '%nilai%' yang aman dipakai di dalam filter .or() PostgREST:
-// (1) spasi/tanda baca yang dibuang normalisasiJP diganti wildcard % (jadi "ABC  TEST" tetap
-//     ketemu "ABC test"), (2) wildcard LIKE (% _ \) di nilai asli dijadikan literal,
-// (3) nilai dibungkus kutip ganda supaya koma/kurung/titik nggak merusak sintaks filter.
-function polaIlike(v) {
-  const bagian = String(v).split(/[\s、。！？・「」]+/).filter(Boolean).map(x => x.replace(/[\\%_]/g, '\\$&'))
-  if (bagian.length === 0) return null
-  const pola = '%' + bagian.join('%') + '%'
-  return '"' + pola.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'
-}
-
 function normalisasiID(s) {
   return String(s).trim().toLowerCase().replace(/[、。！？\s]/g, '')
 }
@@ -90,10 +72,16 @@ function shuffle(arr) {
 // <Kartu> itu "komponen baru", jadi semua kartu ke-remount di tengah
 // proses drag -> browser otomatis batalin drag yang lagi jalan.
 function Kartu({
-  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode,
+  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, modeArtiDulu, terkunci,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
   const { utama: jpUtama, romaji: jpRomaji } = pisahRomaji(k.jp)
+  const sisiJp = (
+    <div>
+      {jpUtama}
+      {jpRomaji && <div style={{ fontSize: 12, marginTop: 4, color: '#7a9a86' }}>({jpRomaji})</div>}
+    </div>
+  )
   return (
     <div
       className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
@@ -114,20 +102,19 @@ function Kartu({
         className="card-inner" onClick={onClick}
         style={{
           boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
-          cursor: pindahMode ? 'grab' : undefined,
+          cursor: pindahMode ? 'grab' : terkunci ? 'text' : undefined,
+          userSelect: terkunci ? 'text' : undefined,
+          WebkitUserSelect: terkunci ? 'text' : undefined,
         }}
       >
         <div className="card-front">
-          <div>
-            {jpUtama}
-            {jpRomaji && <div style={{ fontSize: 12, marginTop: 4, color: '#7a9a86' }}>({jpRomaji})</div>}
-          </div>
+          {modeArtiDulu ? <div>{k.arti}</div> : sisiJp}
         </div>
         <div className="card-back">
-          <div>{k.arti}</div>
+          {modeArtiDulu ? sisiJp : <div>{k.arti}</div>}
         </div>
       </div>
-      <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
+      <button className="hafal-toggle" disabled={terkunci} style={terkunci ? { opacity: 0.35, pointerEvents: 'none' } : undefined} onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
     </div>
   )
 }
@@ -179,7 +166,7 @@ function BlokArti({ k }) {
 }
 
 function BarisKalimat({
-  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, modeArtiDulu,
+  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, modeArtiDulu, terkunci,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
   const depan = modeArtiDulu ? <BlokArti k={k} /> : <BlokJp k={k} />
@@ -199,11 +186,13 @@ function BarisKalimat({
         borderTop: isDragOver && dragOverPos === 'before' ? '3px solid #4a90d9' : '3px solid transparent',
         borderBottom: isDragOver && dragOverPos === 'after' ? '3px solid #4a90d9' : '3px solid transparent',
         boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
+        userSelect: terkunci ? 'text' : undefined,
+        WebkitUserSelect: terkunci ? 'text' : undefined,
       }}
     >
-      <div className="baris-kalimat-atas" onClick={onClick} style={{ cursor: pindahMode ? 'grab' : 'pointer' }}>
+      <div className="baris-kalimat-atas" onClick={onClick} style={{ cursor: pindahMode ? 'grab' : terkunci ? 'text' : 'pointer' }}>
         {depan}
-        <button className="hafal-toggle-inline" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
+        <button className="hafal-toggle-inline" disabled={terkunci} style={terkunci ? { opacity: 0.35, pointerEvents: 'none' } : undefined} onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
       </div>
       <div
         className="baris-kalimat-expand"
@@ -231,6 +220,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [nuansa, setNuansa] = useState('')
   const [kataBaruInput, setKataBaruInput] = useState('')
   const [modeArtiDulu, setModeArtiDulu] = useState(false)
+  const [terkunci, setTerkunci] = useState(false) // true = klik nggak buka/tutup kartu, teks bisa diseleksi & dicopy
   const [bagianInput, setBagianInput] = useState('')
   const [dup, setDup] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -296,7 +286,7 @@ export default function PaketDetail({ paketId, goTo }) {
     const { data: p } = await supabase.from('paket').select('*').eq('id', paketId).single()
     setPaket(p)
     if (p) setSisiPaket(await tentukanSisiStorage(p))
-    const { data: k } = await fetchAll(() => supabase.from('kata').select('*').eq('paket_id', paketId).order('created_at').order('id'))
+    const { data: k } = await supabase.from('kata').select('*').eq('paket_id', paketId).order('created_at')
     setKataList(k || [])
   }
 
@@ -390,36 +380,11 @@ export default function PaketDetail({ paketId, goTo }) {
 
   // cek exact-match kalimat penuh, KHUSUS ke field jp doang (bukan
   // kata_baru) -- dipake buat block total kalimat yang persis sama.
-  // Ambil baris kata yang KEMUNGKINAN cocok dengan salah satu kata, difilter di server
-  // (ILIKE di kolom-kolom yang diminta) lalu dipaginasi sampai habis. Hasilnya superset:
-  // pencocokan final tetap dilakukan di klien pakai normalisasiJP.
-  // Sebelumnya: seluruh tabel kata diunduh tiap kali simpan.
-  async function cariBarisKemungkinanCocok(daftarKata, kolomList, select, excludeId = null) {
-    const pola = [...new Set(daftarKata.flatMap(varianCari).map(polaIlike).filter(Boolean))]
-    if (pola.length === 0) return []
-    const potongan = []
-    for (let i = 0; i < pola.length; i += 10) potongan.push(pola.slice(i, i + 10)) // jaga panjang URL
-    const hasil = await Promise.all(potongan.map(async p => {
-      const cond = p.flatMap(x => kolomList.map(k => `${k}.ilike.${x}`)).join(',')
-      const { data, error } = await fetchAll(() => {
-        let q = supabase.from('kata').select(select).or(cond).order('id')
-        if (excludeId) q = q.neq('id', excludeId)
-        return q
-      })
-      if (error) console.error('Gagal cek duplikat:', error.message)
-      return data || []
-    }))
-    const unik = new Map()
-    hasil.flat().forEach(r => unik.set(r.id, r))
-    return [...unik.values()]
-  }
-
-  // cek exact-match kalimat penuh, KHUSUS ke field jp doang (bukan
-  // kata_baru) -- dipake buat block total kalimat yang persis sama.
   async function cekKalimatSama(jpText, excludeId = null) {
     const norm = normalisasiJP(jpText)
     if (!norm) return null
-    const data = await cariBarisKemungkinanCocok([jpText], ['jp'], 'id, jp, paket:paket_id (nama, tanggal)', excludeId)
+    const { data } = await supabase.from('kata').select('id, jp, paket:paket_id (nama, tanggal)')
+    if (!data) return null
     const match = data.find(row => row.id !== excludeId && normalisasiJP(row.jp) === norm)
     if (!match) return null
     return { kata: match.jp, nama: match.paket?.nama, tanggal: match.paket?.tanggal }
@@ -432,7 +397,8 @@ export default function PaketDetail({ paketId, goTo }) {
   async function cekDuplikatKata(kandidatList, excludeId = null) {
     const kandidat = kandidatList.map(normalisasiJP).filter(Boolean)
     if (kandidat.length === 0) return []
-    const data = await cariBarisKemungkinanCocok(kandidatList, ['jp', 'kata_baru'], 'id, jp, kata_baru, paket:paket_id (nama, tanggal)', excludeId)
+    const { data } = await supabase.from('kata').select('id, jp, kata_baru, paket:paket_id (nama, tanggal)')
+    if (!data) return []
     const hasil = []
     const sudahAda = new Set()
     for (const row of data) {
@@ -645,7 +611,14 @@ export default function PaketDetail({ paketId, goTo }) {
     if (hapusMode) hapusKata(k)
     else if (editMode) mulaiEditKata(k)
     else if (pindahMode) { /* nggak ngapa-ngapain, drag-drop yang jalan */ }
-    else toggleFlip(k.id)
+    else if (!terkunci) toggleFlip(k.id)
+  }
+
+  // pilih mau lihat kanji dulu atau arti dulu (semua kartu balik ke posisi depan)
+  function tampilDulu(artiDulu) {
+    setModeArtiDulu(artiDulu)
+    setFlipped(new Set())
+    setKartuMode(null)
   }
 
   // Form tambah/edit kata. sebaris = true -> dirender LANGSUNG di posisi kartu yang lagi diedit
@@ -680,7 +653,7 @@ export default function PaketDetail({ paketId, goTo }) {
                 {pecahKataBaru(kataBaruInput).length > 0 && (
                   <div style={{ gridColumn: '1 / -1' }}>
                     <div style={{ fontSize: 11, color: '#7a8a80', marginBottom: 4 }}>Arti tiap kata (opsional, ikut muncul di export hafalan). Kalau kata berubah bentuk di kalimat, isi bentuknya dan pilih jenisnya biar bisa dicari di kamus. Pakai Tab buat pindah.</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
                       {[...new Set(pecahKataBaru(kataBaruInput))].map(w => (
                         <div key={w} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 8, rowGap: 4, alignItems: 'center' }}>
                           <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 15, minWidth: 44 }}>{w}</span>
@@ -764,6 +737,7 @@ export default function PaketDetail({ paketId, goTo }) {
         editMode={editMode}
         hapusMode={hapusMode}
         modeArtiDulu={modeArtiDulu}
+        terkunci={terkunci}
         onClick={() => klikKartu(k)}
         onToggleHafal={toggleHafal}
         onDragStart={e => { setDraggingId(k.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -893,12 +867,6 @@ export default function PaketDetail({ paketId, goTo }) {
     else list = [...list].sort((a, b) => urutanEfektif(a) - urutanEfektif(b))
     return list
   }, [kataList, filterBagian, sembunyikan, tampilkanHafal, random, randomOrder])
-
-  function setKartu(mode) {
-    setKartuMode(mode)
-    if (mode === 'buka') setFlipped(new Set(displayList.map(k => k.id)))
-    else setFlipped(new Set())
-  }
 
   const groupedView = filterBagian === 'all' && bagianList.length > 0
 
@@ -1127,11 +1095,9 @@ async function hapusPdf() {
 
 
       <div className="actions">
-        <button className={`act-btn ${kartuMode === 'buka' ? 'active' : ''}`} onClick={() => setKartu('buka')}>Buka semua ▾</button>
-        <button className={`act-btn ${kartuMode === 'tutup' ? 'active' : ''}`} onClick={() => setKartu('tutup')}>Tutup semua ▴</button>
-        {sisiPaket === 'kanan' && (
-          <button className={`act-btn ${modeArtiDulu ? 'active' : ''}`} onClick={() => setModeArtiDulu(m => !m)}>🔄 Arti dulu</button>
-        )}
+        <button className={`act-btn ${!modeArtiDulu ? 'active' : ''}`} onClick={() => tampilDulu(false)}>字 Kanji dulu</button>
+        <button className={`act-btn ${modeArtiDulu ? 'active' : ''}`} onClick={() => tampilDulu(true)}>意 Arti dulu</button>
+        <button className={`act-btn ${terkunci ? 'active' : ''}`} onClick={() => setTerkunci(v => !v)} title="Kunci: kartu nggak bisa kebuka/tertutup kena sentuh, dan teksnya bisa diseleksi lalu dicopy">{terkunci ? '🔒 Terkunci' : '🔓 Kunci'}</button>
         <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
         <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
         <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
@@ -1245,22 +1211,33 @@ async function hapusPdf() {
       </div>
 
       <div className={`modal-overlay ${dup ? 'open' : ''}`}>
-        <div className="modal-box" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="modal-box">
           <div className="modal-icon">{dup?.mode === 'warn' ? '⚠️' : '🔁'}</div>
           <div className="modal-title">{dup?.mode === 'warn' ? 'Kata Ini Udah Pernah Dicatat' : 'Kalimat Ini Udah Pernah Dicatat!'}</div>
           <div className="modal-desc">
-            {dup?.matches?.length === 1 ? (
-              <><b>{dup.matches[0].kata}</b> udah ada di paket <b>{dup.matches[0].nama}{dup.matches[0].tanggal ? ` (${dup.matches[0].tanggal})` : ''}</b>.</>
-            ) : (
-              <>
-                <b>{dup?.matches?.[0]?.kata}</b> udah ada di beberapa paket:
-                <div style={{ maxHeight: 'min(38vh, 320px)', overflowY: 'auto', marginTop: 6, paddingRight: 4 }}>
-                  <ul style={{ margin: '0 0 0 18px', padding: 0 }}>
-                    {dup?.matches?.map((m, i) => <li key={i}><b>{m.nama}</b>{m.tanggal ? ` (${m.tanggal})` : ''}</li>)}
-                  </ul>
-                </div>
-              </>
-            )}
+            {(() => {
+              // gabungkan paket yang sama (satu baris per paket) supaya daftar nggak memanjang
+              const grup = []; const peta = {}
+              ;(dup?.matches || []).forEach(m => {
+                const k = `${m.nama}|${m.tanggal || ''}`
+                if (!peta[k]) { peta[k] = { ...m, n: 0 }; grup.push(peta[k]) }
+                peta[k].n++
+              })
+              if (grup.length === 1) {
+                const m = grup[0]
+                return <><b>{m.kata}</b> udah ada di paket <b>{m.nama}{m.tanggal ? ` (${m.tanggal})` : ''}</b>.</>
+              }
+              return (
+                <>
+                  <b>{dup?.matches?.[0]?.kata}</b> udah ada di {grup.length} paket:
+                  <div style={{ margin: '8px 0 0', maxHeight: 150, overflowY: 'auto', border: '1px solid #d6e8d8', borderRadius: 10, padding: '6px 10px', background: '#f6fbf6', textAlign: 'left' }}>
+                    {grup.map((m, i) => (
+                      <div key={i} style={{ padding: '2px 0' }}>• <b>{m.nama}</b>{m.tanggal ? ` (${m.tanggal})` : ''}{m.n > 1 ? ` ×${m.n}` : ''}</div>
+                    ))}
+                  </div>
+                </>
+              )
+            })()}
             <br /><br />
             {dup?.mode === 'warn'
               ? (sisiPaket === 'kanan'
