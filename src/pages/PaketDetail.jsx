@@ -117,7 +117,7 @@ function Kartu({
           {modeArtiDulu ? sisiJp : <div>{k.arti}</div>}
         </div>
       </div>
-      <button className="hafal-toggle" disabled={terkunci} style={terkunci ? { opacity: 0.35, pointerEvents: 'none' } : undefined} onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
+      <button className="hafal-toggle" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
     </div>
   )
 }
@@ -197,7 +197,7 @@ function BarisKalimat({
     >
       <div className="baris-kalimat-atas" onClick={onClick} style={{ cursor: pindahMode ? 'grab' : terkunci ? 'text' : 'pointer' }}>
         {depan}
-        <button className="hafal-toggle-inline" disabled={terkunci} style={terkunci ? { opacity: 0.35, pointerEvents: 'none' } : undefined} onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
+        <button className="hafal-toggle-inline" onClick={(e) => { e.stopPropagation(); onToggleHafal(k) }}>✓</button>
       </div>
       <div
         className="baris-kalimat-expand"
