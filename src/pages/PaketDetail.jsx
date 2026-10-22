@@ -72,7 +72,7 @@ function shuffle(arr) {
 // <Kartu> itu "komponen baru", jadi semua kartu ke-remount di tengah
 // proses drag -> browser otomatis batalin drag yang lagi jalan.
 function Kartu({
-  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, modeArtiDulu, terkunci,
+  k, glow, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, modeArtiDulu, terkunci,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
   const { utama: jpUtama, romaji: jpRomaji } = pisahRomaji(k.jp)
@@ -84,6 +84,7 @@ function Kartu({
   )
   return (
     <div
+      id={`kalimat-${k.id}`}
       className={`card ${isFlipped ? 'flipped' : ''} ${k.hafal ? 'hafal' : ''}`}
       data-pindah-item
       draggable={pindahMode}
@@ -94,6 +95,8 @@ function Kartu({
       onDrop={onDrop}
       style={{
         opacity: isDragging ? 0.4 : 1,
+        boxShadow: glow ? GLOW : undefined,
+        transition: 'box-shadow .4s',
         borderLeft: isDragOver && dragOverPos === 'before' ? '3px solid #4a90d9' : '3px solid transparent',
         borderRight: isDragOver && dragOverPos === 'after' ? '3px solid #4a90d9' : '3px solid transparent',
       }}
@@ -166,13 +169,14 @@ function BlokArti({ k }) {
 }
 
 function BarisKalimat({
-  k, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, modeArtiDulu, terkunci,
+  k, glow, isFlipped, isDragging, isDragOver, dragOverPos, pindahMode, editMode, hapusMode, modeArtiDulu, terkunci,
   onClick, onToggleHafal, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
 }) {
   const depan = modeArtiDulu ? <BlokArti k={k} /> : <BlokJp k={k} />
   const belakang = modeArtiDulu ? <BlokJp k={k} /> : <BlokArti k={k} />
   return (
     <div
+      id={`kalimat-${k.id}`}
       className={`baris-kalimat ${k.hafal ? 'hafal' : ''}`}
       data-pindah-item
       draggable={pindahMode}
@@ -185,7 +189,8 @@ function BarisKalimat({
         opacity: isDragging ? 0.4 : 1,
         borderTop: isDragOver && dragOverPos === 'before' ? '3px solid #4a90d9' : '3px solid transparent',
         borderBottom: isDragOver && dragOverPos === 'after' ? '3px solid #4a90d9' : '3px solid transparent',
-        boxShadow: editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
+        boxShadow: glow ? GLOW : editMode ? '0 0 0 2px #7aaa8a' : hapusMode ? '0 0 0 2px #f0a8a0' : pindahMode ? '0 0 0 1.5px #cbb8e8' : 'none',
+        transition: 'box-shadow .4s',
         userSelect: terkunci ? 'text' : undefined,
         WebkitUserSelect: terkunci ? 'text' : undefined,
       }}
@@ -207,6 +212,7 @@ function BarisKalimat({
 }
 
 // search di paket: cocokkan kalimat, arti, dan isi Kata Baru (jadi entri Bunpou: juga ketemu)
+const GLOW = '0 0 0 3px #6fcf97, 0 0 22px 6px rgba(111,207,151,.7)'
 const normCari = (t) => String(t || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '')
 const cocokCari = (k, q) => normCari([k.jp, k.arti, k.kata_baru, k.contoh_kalimat, k.bunshuu, k.plesetan, k.konteks, k.nuansa].filter(Boolean).join(' ')).includes(q)
 
@@ -224,6 +230,8 @@ export default function PaketDetail({ paketId, goTo }) {
   const [nuansa, setNuansa] = useState('')
   const [kataBaruInput, setKataBaruInput] = useState('')
   const [modeArtiDulu, setModeArtiDulu] = useState(false)
+  const [glowId, setGlowId] = useState(null)
+  const lompatRef = useRef(null)
   const [cari, setCari] = useState('') // search bar di tab Semua (bisa terisi otomatis dari kamus)
   const [terkunci, setTerkunci] = useState(false) // true = klik nggak buka/tutup kartu, teks bisa diseleksi & dicopy
   const [bagianInput, setBagianInput] = useState('')
@@ -318,19 +326,34 @@ export default function PaketDetail({ paketId, goTo }) {
     setAdaIsiDiary((data || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0))
   }
   useEffect(() => { muatSemua(); cekIsiDiary() }, [paketId])
-  // datang dari kamus: tab Semua + search bar langsung terisi kata yang dicari
+  // datang dari kamus: baca kalimat tujuan (sekali per paket)
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('cariAwalPaket')
+      const raw = localStorage.getItem('lompatKalimat')
       if (!raw) return
-      localStorage.removeItem('cariAwalPaket')
+      localStorage.removeItem('lompatKalimat')
       const seed = JSON.parse(raw)
-      if (seed && String(seed.paketId) === String(paketId) && Date.now() - (seed.t || 0) < 60000) {
-        setFilterBagian('all')
-        setCari(seed.cari || '')
-      }
+      if (seed && String(seed.paketId) === String(paketId) && Date.now() - (seed.t || 0) < 60000) lompatRef.current = String(seed.kataId)
     } catch { /* abaikan */ }
   }, [paketId])
+  // setelah kalimat termuat: buka bagiannya, scroll ke kalimat itu, nyalakan kotaknya 3 detik
+  useEffect(() => {
+    const id = lompatRef.current
+    if (!id || kataList.length === 0) return
+    const k = kataList.find(x => String(x.id) === id)
+    lompatRef.current = null
+    if (!k) return
+    // buka bagian yang berisi kalimat itu (bukan tab Semua); kalau kalimatnya nggak punya bagian, cukup tab Semua tanpa nyala
+    const tujuan = k.bagian || 'all'
+    setFilterBagian(tujuan); setCari(''); setSembunyikan(false); setTampilkanHafal(false)
+    if (tujuan === 'all') return
+    setTimeout(() => {
+      const el = document.getElementById(`kalimat-${k.id}`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setGlowId(k.id)
+      setTimeout(() => setGlowId(null), 3000)
+    }, 200)
+  }, [kataList, paketId])
   // pindah bagian -> daftar mulai dari ATAS lagi (bukan nerusin posisi scroll bagian sebelumnya)
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -747,6 +770,7 @@ export default function PaketDetail({ paketId, goTo }) {
       <Komponen
         key={k.id}
         k={k}
+        glow={glowId === k.id}
         isFlipped={flipped.has(k.id)}
         isDragging={draggingId === k.id}
         isDragOver={pindahMode && dragOverId === k.id && draggingId !== k.id}
