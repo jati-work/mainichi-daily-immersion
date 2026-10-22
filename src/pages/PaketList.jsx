@@ -1018,7 +1018,7 @@ export default function PaketList({ goTo, openPaket }) {
                               </button>
                             )}
                             {g.items.map((c, i) => (
-                              <div key={i} style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                              <div key={i} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                                 {/* garis putus per kalimat: cuma area ini yang bisa diklik, langsung ke kalimatnya di paket */}
                                 <div
                                   title={g.paket ? `Ke kalimat ini di ${g.paket.nama}` : ''}
@@ -1027,7 +1027,7 @@ export default function PaketList({ goTo, openPaket }) {
                                   onMouseLeave={e => { const l = e.currentTarget.firstChild; if (l) l.style.borderLeftColor = '#b9d9c0' }}
                                   style={{ width: 14, flexShrink: 0, alignSelf: 'stretch', cursor: g.paket ? 'pointer' : 'default', display: 'flex', justifyContent: 'center' }}
                                 >
-                                  <div style={{ width: 0, height: '100%', minHeight: 20, borderLeft: '3px dashed #b9d9c0', transition: 'border-color .15s' }} />
+                                  <div style={{ width: 0, height: '100%', minHeight: 20, borderLeft: '3px solid #b9d9c0', borderRadius: 2, transition: 'border-color .15s' }} />
                                 </div>
                                 <div className="meta" style={{ display: 'block', flex: 1, minWidth: 0, userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }}>
                                   <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{c.jp}</span>
