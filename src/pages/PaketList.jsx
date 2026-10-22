@@ -672,6 +672,13 @@ export default function PaketList({ goTo, openPaket }) {
     )
   }
 
+  // buka paket dari hasil kamus; kata yang dicari dititipkan supaya search bar di tab Semua langsung terisi
+  function bukaPaketDariKamus(paket, kata) {
+    if (!paket?.id) return
+    try { localStorage.setItem('cariAwalPaket', JSON.stringify({ paketId: String(paket.id), cari: kata, t: Date.now() })) } catch { /* abaikan */ }
+    openPaket(paket.id)
+  }
+
   const term = search.trim()
   const sedangCari = !!term || !!jenisFilter
   const namaPaketDitemukan = useMemo(() => {
@@ -967,13 +974,18 @@ export default function PaketList({ goTo, openPaket }) {
                 {kamusHasil.map(k => {
                   const buka = kamusBuka.has(k.id)
                   const tampil = buka ? k.contoh : k.contoh.slice(0, 3)
+                  // contoh digabung per paket: tombol paket cuma di contoh pertama tiap paket
+                  const grup = []; const peta = {}
+                  tampil.forEach(c => {
+                    const id = c.paket?.id ?? '_'
+                    if (!peta[id]) { peta[id] = { paket: c.paket, items: [] }; grup.push(peta[id]) }
+                    peta[id].items.push(c)
+                  })
+                  if (grup.length === 0 && k.paket) grup.push({ paket: k.paket, items: [] })
                   return (
-                    <div
-                      key={k.id} className="paket-row" style={{ cursor: k.paket ? 'pointer' : 'default' }}
-                      onClick={() => { if (window.getSelection()?.toString()) return; k.paket && openPaket(k.paket.id) }}
-                    >
+                    <div key={k.id} className="paket-row" style={{ cursor: 'default' }}>
                       <div className="info">
-                        <div className="nama">
+                        <div className="nama" style={{ userSelect: 'text', WebkitUserSelect: 'text' }}>
                           <span style={{ fontFamily: "'Noto Serif JP', serif", fontSize: 16 }}>{k.kata}</span>
                           {k.arti && <span style={{ fontSize: 13, color: '#555' }}> — {k.arti}</span>}
                         </div>
@@ -987,20 +999,48 @@ export default function PaketList({ goTo, openPaket }) {
                             ))}
                           </div>
                         )}
-                        {tampil.map((c, i) => (
-                          <div
-                            key={i} className="meta"
-                            style={{ display: 'block', marginTop: 4, userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }}
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <span>· </span>
-                            <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{c.jp}</span>
-                            {c.arti && <span> — {c.arti}</span>}
+                        {grup.map((g, gi) => (
+                          <div key={gi} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                            {/* garis penanda: cuma area ini (dan tombol) yang bisa diklik untuk buka paket */}
+                            <div
+                              title={g.paket ? `Buka paket ${g.paket.nama}` : ''}
+                              onClick={e => { e.stopPropagation(); bukaPaketDariKamus(g.paket, k.kata) }}
+                              onMouseEnter={e => { const l = e.currentTarget.firstChild; if (l) l.style.background = '#5f9f78' }}
+                              onMouseLeave={e => { const l = e.currentTarget.firstChild; if (l) l.style.background = '#b9d9c0' }}
+                              style={{ width: 14, flexShrink: 0, cursor: g.paket ? 'pointer' : 'default', display: 'flex', justifyContent: 'center' }}
+                            >
+                              <div style={{ width: 3, minHeight: 22, height: '100%', borderRadius: 3, background: '#b9d9c0', transition: 'background .15s' }} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              {g.paket && (
+                                <button
+                                  title={g.paket.nama}
+                                  onClick={e => { e.stopPropagation(); bukaPaketDariKamus(g.paket, k.kata) }}
+                                  style={{
+                                    display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    border: '1px solid #b9d9c0', background: '#f3faf4', color: '#3d7a58', borderRadius: 999,
+                                    padding: '2px 12px', fontSize: 11, cursor: 'pointer', marginBottom: 2,
+                                  }}
+                                >
+                                  › {g.paket.nama}
+                                </button>
+                              )}
+                              {g.items.map((c, i) => (
+                                <div
+                                  key={i} className="meta"
+                                  style={{ display: 'block', marginTop: 4, userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }}
+                                >
+                                  <span>· </span>
+                                  <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{c.jp}</span>
+                                  {c.arti && <span> — {c.arti}</span>}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ))}
                         {k.contoh.length > 3 && (
                           <div
-                            style={{ fontSize: 11, color: '#7aaa8a', marginTop: 4, cursor: 'pointer' }}
+                            style={{ fontSize: 11, color: '#7aaa8a', marginTop: 6, cursor: 'pointer' }}
                             onClick={e => {
                               e.stopPropagation()
                               setKamusBuka(prev => { const n = new Set(prev); n.has(k.id) ? n.delete(k.id) : n.add(k.id); return n })
