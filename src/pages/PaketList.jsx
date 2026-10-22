@@ -152,18 +152,19 @@ export default function PaketList({ goTo, openPaket }) {
         // KAMUS: satu entri per kata (Buku + Harian digabung), isinya arti, bentuk-bentuk berubahnya,
         // dan beberapa contoh kalimat dari Buku (kolom contoh) dan Harian (kalimat yang memuat kata itu)
         const entri = new Map()
-        const ambilEntri = (kata, arti, paket) => {
+        const ambilEntri = (kata, arti, paket, rowId) => {
           const kunci = kunciKata(kata)
           let e = entri.get(kunci)
-          if (!e) { e = { id: kunci, kata, arti: '', bentuk: [], contoh: [], paket }; entri.set(kunci, e) }
+          if (!e) { e = { id: kunci, kata, arti: '', bentuk: [], contoh: [], paket, rowId }; entri.set(kunci, e) }
+          if (e.rowId == null && rowId != null) e.rowId = rowId
           if (!e.arti && arti) e.arti = arti
           if (!e.paket && paket) e.paket = paket
           return e
         }
-        const tambahContoh = (e, jp, arti, paket) => {
+        const tambahContoh = (e, jp, arti, paket, rowId) => {
           const kunci = kunciKata(jp)
           if (!kunci || e.contoh.some(c => c.kunci === kunci)) return
-          e.contoh.push({ kunci, jp: tanpaRomaji(jp), arti: arti || '', paket })
+          e.contoh.push({ kunci, jp: tanpaRomaji(jp), arti: arti || '', paket, rowId })
         }
         ;(data || []).forEach(row => {
           const sisi = row.paket ? sisiItem({ tipe: 'paket', data: row.paket }) : 'kiri'
@@ -172,9 +173,9 @@ export default function PaketList({ goTo, openPaket }) {
               .filter(w => !jenisFilter || (jenisFilter === '*' ? (w.bentuk || w.jenis) : w.jenis === jenisFilter))
               .filter(w => !term || [w.kata, w.arti, w.bentuk, w.jenis].some(x => x.toLowerCase().includes(termLower)))
               .forEach(w => {
-                const e = ambilEntri(w.kata, w.arti, row.paket)
+                const e = ambilEntri(w.kata, w.arti, row.paket, row.id)
                 if ((w.bentuk || w.jenis) && !e.bentuk.some(b => b.bentuk === w.bentuk && b.jenis === w.jenis)) e.bentuk.push({ bentuk: w.bentuk, jenis: w.jenis })
-                tambahContoh(e, row.jp, row.arti, row.paket)
+                tambahContoh(e, row.jp, row.arti, row.paket, row.id)
               })
             return
           }
@@ -182,8 +183,8 @@ export default function PaketList({ goTo, openPaket }) {
           // BUKU: kata biasa (kanji/kana atau arti); contoh kalimatnya ikut jadi contoh
           const cocokNormal = row.jp?.toLowerCase().includes(termLower) || row.arti?.toLowerCase().includes(termLower)
           if (cocokNormal) {
-            const e = ambilEntri(tanpaRomaji(row.jp), row.arti, row.paket)
-            if (row.contoh_kalimat) tambahContoh(e, row.contoh_kalimat, '', row.paket)
+            const e = ambilEntri(tanpaRomaji(row.jp), row.arti, row.paket, row.id)
+            if (row.contoh_kalimat) tambahContoh(e, row.contoh_kalimat, '', row.paket, row.id)
           }
         })
         setKamusHasil([...entri.values()].slice(0, 50))
@@ -672,10 +673,12 @@ export default function PaketList({ goTo, openPaket }) {
     )
   }
 
-  // buka paket dari hasil kamus; kata yang dicari dititipkan supaya search bar di tab Semua langsung terisi
-  function bukaPaketDariKamus(paket, kata) {
+  // buka paket dari hasil kamus; kalimat yang dituju dititipkan supaya paket langsung scroll ke situ dan menyala 3 detik
+  function bukaPaketDariKamus(paket, rowId) {
     if (!paket?.id) return
-    try { localStorage.setItem('cariAwalPaket', JSON.stringify({ paketId: String(paket.id), cari: kata, t: Date.now() })) } catch { /* abaikan */ }
+    if (rowId != null) {
+      try { localStorage.setItem('lompatKalimat', JSON.stringify({ paketId: String(paket.id), kataId: String(rowId), t: Date.now() })) } catch { /* abaikan */ }
+    }
     openPaket(paket.id)
   }
 
@@ -1000,42 +1003,38 @@ export default function PaketList({ goTo, openPaket }) {
                           </div>
                         )}
                         {grup.map((g, gi) => (
-                          <div key={gi} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                            {/* garis penanda: cuma area ini (dan tombol) yang bisa diklik untuk buka paket */}
-                            <div
-                              title={g.paket ? `Buka paket ${g.paket.nama}` : ''}
-                              onClick={e => { e.stopPropagation(); bukaPaketDariKamus(g.paket, k.kata) }}
-                              onMouseEnter={e => { const l = e.currentTarget.firstChild; if (l) l.style.background = '#5f9f78' }}
-                              onMouseLeave={e => { const l = e.currentTarget.firstChild; if (l) l.style.background = '#b9d9c0' }}
-                              style={{ width: 14, flexShrink: 0, cursor: g.paket ? 'pointer' : 'default', display: 'flex', justifyContent: 'center' }}
-                            >
-                              <div style={{ width: 3, minHeight: 22, height: '100%', borderRadius: 3, background: '#b9d9c0', transition: 'background .15s' }} />
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              {g.paket && (
-                                <button
-                                  title={g.paket.nama}
-                                  onClick={e => { e.stopPropagation(); bukaPaketDariKamus(g.paket, k.kata) }}
-                                  style={{
-                                    display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                    border: '1px solid #b9d9c0', background: '#f3faf4', color: '#3d7a58', borderRadius: 999,
-                                    padding: '2px 12px', fontSize: 11, cursor: 'pointer', marginBottom: 2,
-                                  }}
-                                >
-                                  › {g.paket.nama}
-                                </button>
-                              )}
-                              {g.items.map((c, i) => (
+                          <div key={gi} style={{ marginTop: 8 }}>
+                            {g.paket && (
+                              <button
+                                title={g.paket.nama}
+                                onClick={e => { e.stopPropagation(); bukaPaketDariKamus(g.paket, g.items[0]?.rowId ?? k.rowId) }}
+                                style={{
+                                  display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                  border: '1px solid #b9d9c0', background: '#f3faf4', color: '#3d7a58', borderRadius: 999,
+                                  padding: '2px 12px', fontSize: 11, cursor: 'pointer', marginBottom: 2,
+                                }}
+                              >
+                                › {g.paket.nama}
+                              </button>
+                            )}
+                            {g.items.map((c, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                                {/* garis putus per kalimat: cuma area ini yang bisa diklik, langsung ke kalimatnya di paket */}
                                 <div
-                                  key={i} className="meta"
-                                  style={{ display: 'block', marginTop: 4, userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }}
+                                  title={g.paket ? `Ke kalimat ini di ${g.paket.nama}` : ''}
+                                  onClick={e => { e.stopPropagation(); bukaPaketDariKamus(g.paket, c.rowId) }}
+                                  onMouseEnter={e => { const l = e.currentTarget.firstChild; if (l) l.style.borderLeftColor = '#5f9f78' }}
+                                  onMouseLeave={e => { const l = e.currentTarget.firstChild; if (l) l.style.borderLeftColor = '#b9d9c0' }}
+                                  style={{ width: 14, flexShrink: 0, alignSelf: 'stretch', cursor: g.paket ? 'pointer' : 'default', display: 'flex', justifyContent: 'center' }}
                                 >
-                                  <span>· </span>
+                                  <div style={{ width: 0, height: '100%', minHeight: 20, borderLeft: '3px dashed #b9d9c0', transition: 'border-color .15s' }} />
+                                </div>
+                                <div className="meta" style={{ display: 'block', flex: 1, minWidth: 0, userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }}>
                                   <span style={{ fontFamily: "'Noto Serif JP', serif" }}>{c.jp}</span>
                                   {c.arti && <span> — {c.arti}</span>}
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
                         ))}
                         {k.contoh.length > 3 && (
