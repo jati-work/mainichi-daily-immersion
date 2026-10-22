@@ -912,7 +912,7 @@ export default function PaketDetail({ paketId, goTo }) {
     return list
   }, [kataList, filterBagian, cariAktif, sembunyikan, tampilkanHafal, random, randomOrder])
 
-  const groupedView = filterBagian === 'all' && bagianList.length > 0 && !cariAktif
+  const groupedView = filterBagian === 'all' && bagianList.length > 0
 
   async function bukaPdf() {
     tutupPanelLain()
