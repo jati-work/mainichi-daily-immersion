@@ -206,6 +206,10 @@ function BarisKalimat({
   )
 }
 
+// search di paket: cocokkan kalimat, arti, dan isi Kata Baru (jadi entri Bunpou: juga ketemu)
+const normCari = (t) => String(t || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '')
+const cocokCari = (k, q) => normCari([k.jp, k.arti, k.kata_baru, k.contoh_kalimat, k.bunshuu, k.plesetan, k.konteks, k.nuansa].filter(Boolean).join(' ')).includes(q)
+
 export default function PaketDetail({ paketId, goTo }) {
   const [paket, setPaket] = useState(null)
   const [kataList, setKataList] = useState([])
@@ -220,6 +224,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [nuansa, setNuansa] = useState('')
   const [kataBaruInput, setKataBaruInput] = useState('')
   const [modeArtiDulu, setModeArtiDulu] = useState(false)
+  const [cari, setCari] = useState('') // search bar di tab Semua (bisa terisi otomatis dari kamus)
   const [terkunci, setTerkunci] = useState(false) // true = klik nggak buka/tutup kartu, teks bisa diseleksi & dicopy
   const [bagianInput, setBagianInput] = useState('')
   const [dup, setDup] = useState(null)
@@ -313,6 +318,19 @@ export default function PaketDetail({ paketId, goTo }) {
     setAdaIsiDiary((data || []).some(d => d.isi_teks && d.isi_teks.trim().length > 0))
   }
   useEffect(() => { muatSemua(); cekIsiDiary() }, [paketId])
+  // datang dari kamus: tab Semua + search bar langsung terisi kata yang dicari
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('cariAwalPaket')
+      if (!raw) return
+      localStorage.removeItem('cariAwalPaket')
+      const seed = JSON.parse(raw)
+      if (seed && String(seed.paketId) === String(paketId) && Date.now() - (seed.t || 0) < 60000) {
+        setFilterBagian('all')
+        setCari(seed.cari || '')
+      }
+    } catch { /* abaikan */ }
+  }, [paketId])
   // pindah bagian -> daftar mulai dari ATAS lagi (bukan nerusin posisi scroll bagian sebelumnya)
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -858,17 +876,19 @@ export default function PaketDetail({ paketId, goTo }) {
     if (error) { alert('Gagal pindahin kata: ' + error.message); muatSemua() }
   }
 
+  const cariAktif = filterBagian === 'all' ? normCari(cari) : ''
   const displayList = useMemo(() => {
     let list = kataList
     if (filterBagian !== 'all') list = list.filter(k => k.bagian === filterBagian)
+    if (cariAktif) list = list.filter(k => cocokCari(k, cariAktif))
     if (sembunyikan) list = list.filter(k => !k.hafal)
     if (tampilkanHafal) list = list.filter(k => k.hafal)
     if (random) list = [...list].sort((a, b) => (randomOrder.get(a.id) ?? 0) - (randomOrder.get(b.id) ?? 0))
     else list = [...list].sort((a, b) => urutanEfektif(a) - urutanEfektif(b))
     return list
-  }, [kataList, filterBagian, sembunyikan, tampilkanHafal, random, randomOrder])
+  }, [kataList, filterBagian, cariAktif, sembunyikan, tampilkanHafal, random, randomOrder])
 
-  const groupedView = filterBagian === 'all' && bagianList.length > 0
+  const groupedView = filterBagian === 'all' && bagianList.length > 0 && !cariAktif
 
   async function bukaPdf() {
     tutupPanelLain()
@@ -1161,6 +1181,21 @@ async function hapusPdf() {
         </div>
       </div>
 
+      {filterBagian === 'all' && (
+        <div style={{ position: 'relative', margin: '4px 0 10px' }}>
+          <input
+            className="input-search" placeholder="🔍 Cari di paket ini (kata, kalimat, arti, bunpou)…"
+            value={cari} onChange={e => setCari(e.target.value)}
+            style={{ width: '100%', boxSizing: 'border-box', margin: 0, paddingRight: 36 }}
+          />
+          {cari && (
+            <button
+              onClick={() => setCari('')} title="Hapus pencarian"
+              style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: '#7aaa8a' }}
+            >✕</button>
+          )}
+        </div>
+      )}
       {showForm && (!editingId || !displayList.some(k => k.id === editingId)) && renderFormKata(false)}
 
       <div className="grid-wrap">
