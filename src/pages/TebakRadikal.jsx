@@ -68,6 +68,7 @@ export default function TebakRadikal({ goTo, openPaket }) {
   const [kategoriBaruInput, setKategoriBaruInput] = useState('')
 
   const [showTesMenu, setShowTesMenu] = useState(false)
+  const [showMore, setShowMore] = useState(false) // HP: buka/tutup sisa tombol toolbar
   const [tes, setTes] = useState(null)
   const [showPickerTes, setShowPickerTes] = useState(false)
   const [pickerAktif, setPickerAktif] = useState(false) // keyboard samping di halaman utama: cuma muncul pas kolom pencarian/Karakter lagi diklik
@@ -263,11 +264,27 @@ export default function TebakRadikal({ goTo, openPaket }) {
       <style>{`
         .kategori-scroll::-webkit-scrollbar { height: 0; display: none; }
         .kategori-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+        /* Desktop: pembungkus tidak berpengaruh, tombol tetap sejajar seperti biasa */
+        .actions-more { display: contents; }
+        .btn-more-toggle { display: none; }
+        /* Khusus HP */
+        @media (max-width: 700px) {
+          /* judul + tombol kembali di baris atas, slide kategori selebar layar di bawahnya */
+          .header-bar { flex-wrap: wrap !important; row-gap: 8px; }
+          .header-bar .title { order: 1; }
+          .header-bar .btn-back { order: 2; margin-left: auto !important; }
+          .header-bar .kategori-wrap { order: 3; flex: 1 1 100% !important; width: 100%; }
+          .header-bar .stats { display: none !important; }
+          /* toolbar: Buka semua, Tutup semua, lalu panah untuk sisanya */
+          .actions .btn-more-toggle { display: inline-flex; align-items: center; justify-content: center; }
+          .actions .actions-more { display: none; }
+          .actions .actions-more.open { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; width: 100%; }
+        }
       `}</style>
 
       <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center', gap: 10 }}>
         <div className="title" style={{ flexShrink: 0, marginTop: -2 }}>部首 Tebak Radikal</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: '1 1 auto' }}>
+        <div className="kategori-wrap" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: '1 1 auto' }}>
           <button className={`act-btn ${kategoriAktif === 'all' ? 'active' : ''}`} onClick={() => setKategoriAktif('all')} style={{ flexShrink: 0 }}>Semua</button>
           <div className="kategori-scroll" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', flexWrap: 'nowrap', minWidth: 0, padding: '3px 4px', margin: '0 -4px' }}>
             {kategoriTersedia.map(k => (
@@ -278,12 +295,14 @@ export default function TebakRadikal({ goTo, openPaket }) {
           </div>
         </div>
         <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kategoriUntukStats.length} radikal · ✓ {jumlahHafal} hafal</div>
-        <button className="icon-btn" onClick={() => goTo('cover')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
+        <button className="icon-btn btn-back" onClick={() => goTo('cover')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
       </div>
 
       <div className="actions">
         <button className={`act-btn ${kartuMode === 'buka' ? 'active' : ''}`} onClick={() => setKartu('buka')}>Buka semua ▾</button>
         <button className={`act-btn ${kartuMode === 'tutup' ? 'active' : ''}`} onClick={() => setKartu('tutup')}>Tutup semua ▴</button>
+        <button className={`act-btn btn-more-toggle ${showMore ? 'active' : ''}`} onClick={() => setShowMore(v => !v)} title="Tombol lainnya" aria-expanded={showMore}>{showMore ? '▴' : '▾'}</button>
+        <div className={`actions-more ${showMore ? 'open' : ''}`}>
         <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
         <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
         <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
@@ -305,6 +324,7 @@ export default function TebakRadikal({ goTo, openPaket }) {
         <button className={`act-btn ${hapusMode ? 'active' : ''}`} onClick={toggleHapusMode}>🗑️ Hapus</button>
         <div style={{ marginLeft: 'auto' }}>
           <ImportExcelRadikal radikalList={radikalList} onDone={muatData} />
+        </div>
         </div>
       </div>
 
