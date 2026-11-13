@@ -270,6 +270,7 @@ export default function PaketDetail({ paketId, goTo }) {
   const [dragOverBagian, setDragOverBagian] = useState(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showTesBawah, setShowTesBawah] = useState(false)
+  const [showMore, setShowMore] = useState(false) // HP: buka/tutup sisa tombol toolbar
 
   useEffect(() => {
   function handleClickOutside(e) {
@@ -1083,6 +1084,18 @@ async function hapusPdf() {
       <style>{`
         .bagian-scroll::-webkit-scrollbar { height: 0; display: none; }
         .bagian-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+        /* Desktop: pembungkus tidak berpengaruh, tombol tetap sejajar seperti biasa */
+        .actions-more { display: contents; }
+        .btn-more-toggle { display: none; }
+        /* Khusus HP */
+        @media (max-width: 700px) {
+          .header-bar .stats { display: none !important; }
+          .header-bar .btn-back { margin-left: auto !important; }
+          .actions .btn-hide-mobile { display: none !important; }
+          .actions .btn-more-toggle { display: inline-flex; align-items: center; justify-content: center; }
+          .actions .actions-more { display: none; }
+          .actions .actions-more.open { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; width: 100%; }
+        }
       `}</style>
       <div className="header-bar" style={{ flexWrap: 'nowrap', alignItems: 'center', gap: 10 }}>
         <div className="title" style={{ flexShrink: 0, marginTop: -2 }}>{paket.nama}</div>
@@ -1134,7 +1147,7 @@ async function hapusPdf() {
           </div>
         )}
         <div className="stats" style={{ flexShrink: 0, marginLeft: 'auto', paddingLeft: 10 }}>{kataUntukStats.length} kata · ✓ {jumlahHafal} hafal</div>
-        <button className="icon-btn" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
+        <button className="icon-btn btn-back" onClick={() => goTo('paket')} title="Kembali" style={{ flexShrink: 0 }}>←</button>
       </div>
 
 
@@ -1142,6 +1155,8 @@ async function hapusPdf() {
         <button className={`act-btn ${!modeArtiDulu ? 'active' : ''}`} onClick={() => tampilDulu(false)}>字 Kanji dulu</button>
         <button className={`act-btn ${modeArtiDulu ? 'active' : ''}`} onClick={() => tampilDulu(true)}>意 Arti dulu</button>
         <button className={`act-btn ${terkunci ? 'active' : ''}`} onClick={() => setTerkunci(v => !v)} title="Kunci: kartu nggak bisa kebuka/tertutup kena sentuh, dan teksnya bisa diseleksi lalu dicopy">{terkunci ? '🔒 Terkunci' : '🔓 Kunci'}</button>
+        <button className={`act-btn btn-more-toggle ${showMore ? 'active' : ''}`} onClick={() => setShowMore(v => !v)} title="Tombol lainnya" aria-expanded={showMore}>{showMore ? '▴' : '▾'}</button>
+        <div className={`actions-more ${showMore ? 'open' : ''}`}>
         <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
         <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
         <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
@@ -1176,8 +1191,8 @@ async function hapusPdf() {
             </div>
           )}
         </div>
-        <button className="act-btn" onClick={tambahBagian}>＋ Bagian</button>
-        <button className={`act-btn ${showForm ? 'active' : ''}`} onClick={toggleForm}>{editingId ? '✏️ Edit Kata' : '＋ Kata'}</button>
+        <button className="act-btn btn-hide-mobile" onClick={tambahBagian}>＋ Bagian</button>
+        <button className={`act-btn btn-hide-mobile ${showForm ? 'active' : ''}`} onClick={toggleForm}>{editingId ? '✏️ Edit Kata' : '＋ Kata'}</button>
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
         <button className={`act-btn ${adaIsiDiary ? 'active' : ''}`} onClick={bukaDiary} title="Buku Diary">📔</button>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
@@ -1201,6 +1216,7 @@ async function hapusPdf() {
               <button className="act-btn" style={{ textAlign: 'left', color: '#c0392b' }} onClick={() => { resetHafalan(); setShowMenu(false) }}>↺ Reset Hafalan</button>
             </div>
           )}
+        </div>
         </div>
         </div>
       </div>
