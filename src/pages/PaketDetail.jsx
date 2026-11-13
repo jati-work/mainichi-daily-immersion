@@ -271,6 +271,15 @@ export default function PaketDetail({ paketId, goTo }) {
   const [showMenu, setShowMenu] = useState(false)
   const [showTesBawah, setShowTesBawah] = useState(false)
   const [showMore, setShowMore] = useState(false) // HP: buka/tutup sisa tombol toolbar
+  // true kalau layar HP (<= 700px) -- dipakai buat mindahin tombol Tes ke samping Kunci
+  const [isHP, setIsHP] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 700px)')
+    const onChange = (e) => setIsHP(e.matches)
+    setIsHP(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   useEffect(() => {
   function handleClickOutside(e) {
@@ -1079,6 +1088,40 @@ async function hapusPdf() {
   const jumlahHafal = kataUntukStats.filter(k => k.hafal).length
   const selesai = tes && tes.idx >= tes.words.length
 
+  const tesDropdown = (
+        <div style={{ position: 'relative' }} data-dropdown>
+          <button className="act-btn" onClick={() => setShowTesBawah(s => !s)}>📝 Tes</button>
+          {showTesBawah && (
+            <div style={{ position: 'absolute', ...(isHP ? { right: 0 } : { left: 0 }), top: 36, background: '#fff', border: '1.5px solid #ddd', borderRadius: 10, padding: 6, display: 'flex', flexDirection: 'column', gap: 4, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 20, minWidth: 200 }}>
+              <div style={{ fontSize: 10, color: '#9abaa8', padding: '2px 6px', letterSpacing: '.06em', textTransform: 'uppercase' }}>Soal → Jawaban</div>
+              {sisiPaket === 'kanan' ? (
+                <>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-arti'); setShowTesBawah(false) }}>Kalimat → Arti</button>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kalimat</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <div style={{ fontSize: 10, color: '#9abaa8', padding: '2px 6px', letterSpacing: '.06em', textTransform: 'uppercase' }}>Pemanasan (kata)</div>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTesKata('dasar-arti'); setShowTesBawah(false) }}>Kata → Arti</button>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTesKata('arti-dasar'); setShowTesBawah(false) }}>Arti → Kata</button>
+                </>
+              ) : (
+                <>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('plesetan-kanji-arti'); setShowTesBawah(false) }}>Plesetan → Kanji + Arti</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kanji Dasar</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('bunshuu-kanji'); setShowTesBawah(false) }}>Bunshuu → Kanji Dasar</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-arti'); setShowTesBawah(false) }}>Kanji Dasar → Arti</button>
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-bunshuu'); setShowTesBawah(false) }}>Kanji Dasar → Bunshuu</button>
+                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
+                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('natural-dasar'); setShowTesBawah(false) }}>Contoh Kalimat → Kanji Dasar</button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+  )
+
   return (
     <div>
       <style>{`
@@ -1088,7 +1131,10 @@ async function hapusPdf() {
         .actions-more { display: contents; }
         .btn-more-toggle { display: none; }
         /* Khusus HP */
+        .bagian-scroll { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
         @media (max-width: 700px) {
+          /* HP: tab bagian digeser pakai usapan jari, tombol panah disembunyikan */
+          .btn-geser { display: none !important; }
           .header-bar .stats { display: none !important; }
           .header-bar .btn-back { margin-left: auto !important; }
           .actions .btn-hide-mobile { display: none !important; }
@@ -1108,7 +1154,7 @@ async function hapusPdf() {
             >Semua</button>
 
             {scrollState.canLeft && (
-              <button onClick={() => geserBagian(-1)} title="Geser ke kiri" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26, marginRight: 3 }}>‹</button>
+              <button onClick={() => geserBagian(-1)} title="Geser ke kiri" className="icon-btn btn-geser" style={{ flexShrink: 0, width: 26, height: 26, marginRight: 3 }}>‹</button>
             )}
             <div
               ref={bagianScrollRef}
@@ -1142,7 +1188,7 @@ async function hapusPdf() {
               ))}
             </div>
             {scrollState.canRight && (
-              <button onClick={() => geserBagian(1)} title="Geser ke kanan" className="icon-btn" style={{ flexShrink: 0, width: 26, height: 26, marginLeft: 3 }}>›</button>
+              <button onClick={() => geserBagian(1)} title="Geser ke kanan" className="icon-btn btn-geser" style={{ flexShrink: 0, width: 26, height: 26, marginLeft: 3 }}>›</button>
             )}
           </div>
         )}
@@ -1155,42 +1201,13 @@ async function hapusPdf() {
         <button className={`act-btn ${!modeArtiDulu ? 'active' : ''}`} onClick={() => tampilDulu(false)}>字 Kanji dulu</button>
         <button className={`act-btn ${modeArtiDulu ? 'active' : ''}`} onClick={() => tampilDulu(true)}>意 Arti dulu</button>
         <button className={`act-btn ${terkunci ? 'active' : ''}`} onClick={() => setTerkunci(v => !v)} title="Kunci: kartu nggak bisa kebuka/tertutup kena sentuh, dan teksnya bisa diseleksi lalu dicopy">{terkunci ? '🔒 Terkunci' : '🔓 Kunci'}</button>
+        {isHP && tesDropdown}
         <button className={`act-btn btn-more-toggle ${showMore ? 'active' : ''}`} onClick={() => setShowMore(v => !v)} title="Tombol lainnya" aria-expanded={showMore}>{showMore ? '▴' : '▾'}</button>
         <div className={`actions-more ${showMore ? 'open' : ''}`}>
         <button className={`act-btn ${random ? 'active' : ''}`} onClick={toggleRandom}>🔀 Random</button>
         <button className={`act-btn ${sembunyikan ? 'active' : ''}`} onClick={toggleSembunyikan}>👁 Sembunyikan hafal</button>
         <button className={`act-btn ${tampilkanHafal ? 'active' : ''}`} onClick={toggleTampilkanHafal}>⭐ Hafal saja</button>
-        <div style={{ position: 'relative' }} data-dropdown>
-          <button className="act-btn" onClick={() => setShowTesBawah(s => !s)}>📝 Tes</button>
-          {showTesBawah && (
-            <div style={{ position: 'absolute', left: 0, top: 36, background: '#fff', border: '1.5px solid #ddd', borderRadius: 10, padding: 6, display: 'flex', flexDirection: 'column', gap: 4, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 20, minWidth: 200 }}>
-              <div style={{ fontSize: 10, color: '#9abaa8', padding: '2px 6px', letterSpacing: '.06em', textTransform: 'uppercase' }}>Soal → Jawaban</div>
-              {sisiPaket === 'kanan' ? (
-                <>
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-arti'); setShowTesBawah(false) }}>Kalimat → Arti</button>
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kalimat</button>
-                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
-                  <div style={{ fontSize: 10, color: '#9abaa8', padding: '2px 6px', letterSpacing: '.06em', textTransform: 'uppercase' }}>Pemanasan (kata)</div>
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTesKata('dasar-arti'); setShowTesBawah(false) }}>Kata → Arti</button>
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTesKata('arti-dasar'); setShowTesBawah(false) }}>Arti → Kata</button>
-                </>
-              ) : (
-                <>
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('plesetan-kanji-arti'); setShowTesBawah(false) }}>Plesetan → Kanji + Arti</button>
-                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('arti-dasar'); setShowTesBawah(false) }}>Arti → Kanji Dasar</button>
-                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('bunshuu-kanji'); setShowTesBawah(false) }}>Bunshuu → Kanji Dasar</button>
-                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-arti'); setShowTesBawah(false) }}>Kanji Dasar → Arti</button>
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('dasar-bunshuu'); setShowTesBawah(false) }}>Kanji Dasar → Bunshuu</button>
-                  <div style={{ height: 1, background: '#eee', margin: '2px 0' }} />
-                  <button className="act-btn" style={{ textAlign: 'left' }} onClick={() => { startTes('natural-dasar'); setShowTesBawah(false) }}>Contoh Kalimat → Kanji Dasar</button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+        {!isHP && tesDropdown}
         <button className="act-btn btn-hide-mobile" onClick={tambahBagian}>＋ Bagian</button>
         <button className={`act-btn btn-hide-mobile ${showForm ? 'active' : ''}`} onClick={toggleForm}>{editingId ? '✏️ Edit Kata' : '＋ Kata'}</button>
         <button className={`act-btn ${paket.pdf_path ? 'active' : ''}`} onClick={bukaPdf} title={paket.pdf_path ? 'Lihat PDF' : 'Belum ada PDF'}>📄</button>
