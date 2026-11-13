@@ -819,7 +819,7 @@ export default function PaketList({ goTo, openPaket }) {
 
   function PanelSisi({ sisi, label, currentId, setCurrentId, subfolder, paket, items, jejak }) {
     return (
-      <div style={{ flex: 1, minWidth: 0, padding: sisi === 'kiri' ? '0 24px 0 0' : '0 0 0 24px' }}>
+      <div className="panel-sisi" style={{ flex: 1, minWidth: 0, padding: sisi === 'kiri' ? '0 24px 0 0' : '0 0 0 24px' }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#7aaa8a', marginBottom: 8 }}>{label}</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           <Breadcrumb currentId={currentId} jejak={jejak} onNavigate={setCurrentId} />
@@ -879,6 +879,21 @@ export default function PaketList({ goTo, openPaket }) {
 
   return (
     <div className="cover" style={{ justifyContent: 'flex-start', paddingTop: 60 }}>
+      <style>{`
+        /* Khusus tampilan HP. Desktop tidak berubah. */
+        @media (max-width: 700px) {
+          /* header: judul saja, lalu tombol Tes Perubahan Kata di bawahnya */
+          .paket-list-wide .cover-head { flex-wrap: wrap !important; row-gap: 12px; }
+          .paket-list-wide .head-extra,
+          .paket-list-wide .head-spacer { display: none !important; }
+          .paket-list-wide .head-tes { flex-basis: 100%; width: 100%; }
+          .paket-list-wide .btn-tes-ubah { width: 100% !important; }
+
+          /* Buku & Harian: ditumpuk, lebar dan tepi kiri sama persis */
+          .paket-list-wide .panel-dua-sisi { flex-direction: column !important; align-items: stretch !important; }
+          .paket-list-wide .panel-sisi { width: 100% !important; flex: none !important; padding: 0 !important; }
+        }
+      `}</style>
       <div className="cover-inner paket-list-wide">
         <div className="cover-head" style={{ position: 'relative' }}>
           {/* Tombol ← ke cover: ikut ke-scroll bareng halaman (nggak melayang), nempel di pojok kanan atas
@@ -891,7 +906,7 @@ export default function PaketList({ goTo, openPaket }) {
           <div>
             <div className="cover-title" style={{ fontSize: 22 }}>Kotoba Immersion</div>
           </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
+          <div className="head-extra" style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 8 }}>
             <button
               className="icon-btn" title="Download daftar hafalan ke Excel" onClick={exportExcelHafalan}
               disabled={exportLoading}
@@ -915,10 +930,10 @@ export default function PaketList({ goTo, openPaket }) {
               </div>
             )}
           </div>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <div className="head-spacer" style={{ flex: 1 }} />
+          <div className="head-tes" style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
             <button
-              className="act-btn" onClick={mulaiTesUbah} title="Latihan menebak perubahan bentuk kata"
+              className="act-btn btn-tes-ubah" onClick={mulaiTesUbah} title="Latihan menebak perubahan bentuk kata"
               style={{ width: 165, height: 38, borderRadius: 12, padding: '0 6px', margin: 0, boxSizing: 'border-box', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
             >📝 Tes Perubahan Kata</button>
           </div>
